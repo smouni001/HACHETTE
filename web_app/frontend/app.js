@@ -477,11 +477,18 @@ async function fetchWithTimeout(url, options = {}, timeoutMs = CATALOG_REQUEST_T
   }
 }
 
-function formatCatalogReadyMessage(count, advancedMode, sourceProgram) {
+function formatCatalogReadyMessage(count, advancedMode, sourceProgram, profiles = []) {
   const safeCount = Number.isFinite(count) ? count : 0;
   const safeProgram = sourceProgram || "programme";
+  const profileList = Array.isArray(profiles) ? profiles : [];
+  const hasInvoiceProfiles = profileList.some(
+    (profile) => String(profile?.view_mode || "").toLowerCase() === "invoice",
+  );
   if (advancedMode) {
     return `Mode avance actif (${safeProgram}): ${safeCount} flux Input/Output disponible(s).`;
+  }
+  if (!hasInvoiceProfiles) {
+    return `Mode standard actif (${safeProgram}): ${safeCount} flux disponible(s).`;
   }
   return (
     `Mode standard actif (${safeProgram}): ${safeCount} fichier(s) de facturation disponible(s). ` +
@@ -1014,7 +1021,7 @@ async function loadCatalog(preferredSelection = null, options = {}) {
     const preferredFlow = String(preferredSelection?.flow_type || payload.default_flow_type || "output").toLowerCase();
     const preferredFile = String(preferredSelection?.file_name || payload.default_file_name || "FICDEMA").toUpperCase();
     loadFlowOptions(preferredFlow, preferredFile);
-    setCatalogStatus(formatCatalogReadyMessage(catalogProfiles.length, advancedMode, catalogSourceProgram));
+    setCatalogStatus(formatCatalogReadyMessage(catalogProfiles.length, advancedMode, catalogSourceProgram, catalogProfiles));
     lastStableState = captureUiState();
     return true;
   } catch (error) {
@@ -1258,7 +1265,7 @@ form.addEventListener("submit", async (event) => {
       String(cached.default_file_name || "FICDEMA").toUpperCase(),
     );
     setCatalogStatus(
-      `${formatCatalogReadyMessage(catalogProfiles.length, advancedMode, catalogSourceProgram)} (charge rapidement depuis le cache local)`,
+      `${formatCatalogReadyMessage(catalogProfiles.length, advancedMode, catalogSourceProgram, catalogProfiles)} (charge rapidement depuis le cache local)`,
     );
     await loadCatalog();
     return;
