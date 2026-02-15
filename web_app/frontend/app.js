@@ -323,6 +323,16 @@ function isPrimaryProgram(programId) {
   return String(programId || "").toLowerCase() === PRIMARY_PROGRAM_ID;
 }
 
+function currentProgramConfig() {
+  const id = currentProgramId();
+  return knownPrograms.find((item) => String(item?.program_id || "").toLowerCase() === id) || null;
+}
+
+function isInvoiceOnlyProgram() {
+  const program = currentProgramConfig();
+  return Boolean(program?.invoice_only_default);
+}
+
 function cloneProfiles(profiles) {
   return Array.isArray(profiles) ? JSON.parse(JSON.stringify(profiles)) : [];
 }
@@ -882,7 +892,7 @@ function updateUploadLabel() {
   renderProfileContext(profile);
   resetKpisForProfile(profile);
   updateDownloadMode(profile);
-  if (!isAdvancedModeEnabled() && profile.view_mode !== "invoice") {
+  if (isInvoiceOnlyProgram() && !isAdvancedModeEnabled() && profile.view_mode !== "invoice") {
     launchBtn.disabled = true;
     setError("Mode standard actif: seuls les fichiers Factures sont autorises.");
     return;
@@ -1199,7 +1209,7 @@ form.addEventListener("submit", async (event) => {
     setError("Selection flux/fichier invalide.");
     return;
   }
-  if (!advancedMode && profile.view_mode !== "invoice") {
+  if (isInvoiceOnlyProgram() && !advancedMode && profile.view_mode !== "invoice") {
     setError("Mode standard actif: seuls les fichiers Factures sont autorises.");
     return;
   }

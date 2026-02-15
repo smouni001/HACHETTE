@@ -1261,7 +1261,7 @@ async def create_job(
 ) -> JobCreateResponse:
     program = _resolve_program(program_id)
     profile = _resolve_profile(program_id=program.program_id, flow_type=flow_type, file_name=file_name)
-    if not advanced_mode and profile.view_mode != "invoice":
+    if program.invoice_only_default and not advanced_mode and profile.view_mode != "invoice":
         raise HTTPException(
             status_code=400,
             detail=(
