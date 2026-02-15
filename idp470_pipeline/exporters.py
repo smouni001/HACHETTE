@@ -4,7 +4,7 @@ from datetime import datetime
 from io import BytesIO
 import logging
 import re
-from collections import Counter
+from collections import Counter, defaultdict
 from decimal import Decimal
 from pathlib import Path
 from typing import Any
@@ -802,3 +802,231 @@ def export_first_invoice_pdf(
 
     doc.build(story)
     LOGGER.info("PDF exported to %s", output_path)
+
+
+def export_accounting_summary_pdf(
+    records: list[dict[str, Any]],
+    output_path: Path,
+    logo_path: Path | None = None,
+) -> None:
+    try:
+        from reportlab.lib import colors
+        from reportlab.lib.pagesizes import A4
+        from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
+        from reportlab.lib.units import mm
+        from reportlab.lib.utils import ImageReader
+        from reportlab.platypus import Image, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
+    except ModuleNotFoundError as error:
+        raise RuntimeError("PDF export requires reportlab. Install with: pip install reportlab") from error
+
+    ent_records = [record for record in records if record.get("record_type") == "ENT"]
+    if not ent_records:
+        raise ValueError("Aucun enregistrement ENT trouve pour construire la synthese comptable PDF.")
+
+    invoice_entries: list[dict[str, Any]] = []
+    seen_invoice_keys: set[str] = set()
+
+    for index, ent in enumerate(ent_records, start=1):
+        invoice_key = str(ent.get("NUFAC", "")).strip() or f"SANS_NUM_{index}"
+        if invoice_key in seen_invoice_keys:
+            continue
+        seen_invoice_keys.add(invoice_key)
+
+        adr = next(
+            (
+                record
+                for record in records
+                if record.get("record_type") == "ADR" and str(record.get("NUFAC", "")).strip() == invoice_key
+            ),
+            None,
+        )
+        if adr is None:
+            adr = {}
+
+        client_id = str(ent.get("NUCLI", "")).strip()
+        if not client_id:
+            client_id = str(_first_non_empty(adr, ["CLLIV_NOCLI"])).strip() or "INCONNU"
+
+        client_label = str(_first_non_empty(adr, ["CLLIV_RASOC", "CLLIV_NOCLI"])).strip() or client_id
+        invoice_date = str(ent.get("DAFAC", "")).strip()
+
+        total_ht = _signed_value(ent.get("SMONHT"), ent.get("MONHT"))
+        total_tva = _signed_value(ent.get("SMTTVA"), ent.get("MTTVA"))
+        total_ttc = _signed_value(ent.get("SMTTTC"), ent.get("MTTTC"))
+
+        invoice_entries.append(
+            {
+                "client_id": client_id,
+                "client_label": client_label,
+                "invoice_key": invoice_key,
+                "invoice_date": invoice_date,
+                "total_ht": total_ht,
+                "total_tva": total_tva,
+                "total_ttc": total_ttc,
+            }
+        )
+
+    grouped: dict[str, dict[str, Any]] = defaultdict(
+        lambda: {
+            "client_label": "",
+            "count": 0,
+            "total_ht": Decimal(0),
+            "total_tva": Decimal(0),
+            "total_ttc": Decimal(0),
+            "invoices": [],
+        }
+    )
+    for entry in invoice_entries:
+        client_id = entry["client_id"]
+        bucket = grouped[client_id]
+        bucket["client_label"] = entry["client_label"] or bucket["client_label"]
+        bucket["count"] += 1
+        bucket["total_ht"] += entry["total_ht"]
+        bucket["total_tva"] += entry["total_tva"]
+        bucket["total_ttc"] += entry["total_ttc"]
+        bucket["invoices"].append(entry)
+
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    doc = SimpleDocTemplate(str(output_path), pagesize=A4, rightMargin=12 * mm, leftMargin=12 * mm)
+    styles = getSampleStyleSheet()
+    title_style = ParagraphStyle(
+        "summary_title",
+        parent=styles["Heading2"],
+        fontName="Helvetica-Bold",
+        fontSize=15,
+        leading=18,
+        textColor=colors.HexColor("#0b1f33"),
+    )
+    subtitle_style = ParagraphStyle(
+        "summary_meta",
+        parent=styles["Normal"],
+        fontName="Helvetica",
+        fontSize=9.5,
+        leading=12,
+        textColor=colors.HexColor("#334155"),
+    )
+
+    story: list[Any] = []
+    resolved_logo = _resolve_logo_path(logo_path)
+    if resolved_logo:
+        image_reader = ImageReader(str(resolved_logo))
+        src_w, src_h = image_reader.getSize()
+        target_w = 42 * mm
+        target_h = target_w * (src_h / src_w)
+        if target_h > 16 * mm:
+            ratio = (16 * mm) / target_h
+            target_w *= ratio
+            target_h *= ratio
+        header_logo: Any = Image(str(resolved_logo), width=target_w, height=target_h)
+    else:
+        header_logo = Paragraph("<b>Hachette Livre</b>", styles["Heading3"])
+
+    generated_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    header_info = Table(
+        [
+            [Paragraph("SYNTHESE COMPTABLE CLIENTS", title_style)],
+            [Paragraph(f"Genere le: <b>{generated_at}</b>", subtitle_style)],
+            [Paragraph(f"Clients: <b>{len(grouped)}</b> | Factures: <b>{len(invoice_entries)}</b>", subtitle_style)],
+        ],
+        colWidths=[126 * mm],
+    )
+    header_info.setStyle(
+        TableStyle(
+            [
+                ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                ("LEFTPADDING", (0, 0), (-1, -1), 0),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 0),
+                ("TOPPADDING", (0, 0), (-1, -1), 0),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 2),
+            ]
+        )
+    )
+    header_table = Table([[header_logo, header_info]], colWidths=[48 * mm, 126 * mm])
+    header_table.setStyle(
+        TableStyle(
+            [
+                ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                ("ALIGN", (1, 0), (1, 0), "LEFT"),
+                ("BOX", (0, 0), (-1, -1), 0.6, colors.HexColor("#c6d3e1")),
+                ("LEFTPADDING", (0, 0), (-1, -1), 8),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 8),
+                ("TOPPADDING", (0, 0), (-1, -1), 6),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
+                ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#f7fbff")),
+            ]
+        )
+    )
+    story.append(header_table)
+    story.append(Spacer(1, 5 * mm))
+
+    summary_rows = [["Client", "Libelle client", "Factures", "Total HT", "Total TVA", "Total TTC"]]
+    for client_id in sorted(grouped.keys()):
+        item = grouped[client_id]
+        summary_rows.append(
+            [
+                client_id,
+                str(item["client_label"])[:50],
+                str(item["count"]),
+                _fmt_amount(item["total_ht"]),
+                _fmt_amount(item["total_tva"]),
+                _fmt_amount(item["total_ttc"]),
+            ]
+        )
+
+    summary_table = Table(
+        summary_rows,
+        colWidths=[20 * mm, 57 * mm, 18 * mm, 26 * mm, 26 * mm, 26 * mm],
+        repeatRows=1,
+    )
+    summary_table.setStyle(
+        TableStyle(
+            [
+                ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#0f766e")),
+                ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+                ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+                ("FONTSIZE", (0, 0), (-1, -1), 8.5),
+                ("GRID", (0, 0), (-1, -1), 0.25, colors.HexColor("#b7c8d8")),
+                ("ALIGN", (2, 1), (-1, -1), "RIGHT"),
+                ("VALIGN", (0, 0), (-1, -1), "TOP"),
+            ]
+        )
+    )
+    story.append(summary_table)
+    story.append(Spacer(1, 6 * mm))
+
+    detail_rows = [["Client", "Facture", "Date", "HT", "TVA", "TTC"]]
+    for item in sorted(invoice_entries, key=lambda x: (x["client_id"], x["invoice_key"])):
+        detail_rows.append(
+            [
+                item["client_id"],
+                item["invoice_key"],
+                item["invoice_date"],
+                _fmt_amount(item["total_ht"]),
+                _fmt_amount(item["total_tva"]),
+                _fmt_amount(item["total_ttc"]),
+            ]
+        )
+
+    detail_table = Table(
+        detail_rows,
+        colWidths=[21 * mm, 44 * mm, 22 * mm, 29 * mm, 29 * mm, 29 * mm],
+        repeatRows=1,
+    )
+    detail_table.setStyle(
+        TableStyle(
+            [
+                ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#eaf2fb")),
+                ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+                ("FONTSIZE", (0, 0), (-1, -1), 8),
+                ("GRID", (0, 0), (-1, -1), 0.25, colors.HexColor("#b7c8d8")),
+                ("ALIGN", (3, 1), (-1, -1), "RIGHT"),
+                ("VALIGN", (0, 0), (-1, -1), "TOP"),
+            ]
+        )
+    )
+    story.append(Paragraph("<b>Detail des factures</b>", subtitle_style))
+    story.append(Spacer(1, 2 * mm))
+    story.append(detail_table)
+
+    doc.build(story)
+    LOGGER.info("Accounting summary PDF exported to %s", output_path)

@@ -87,12 +87,20 @@ python -m idp470_pipeline excel ^
   --contract contracts/idp470ra_contract.json
 ```
 
-## 4) Generation PDF
+## 4) Generation PDF Factures
 
 ```bash
 python -m idp470_pipeline pdf ^
   --input-jsonl outputs/parsed_records.jsonl ^
   --output-pdf outputs/facture_exemple.pdf
+```
+
+## 5) Generation PDF Synthese Comptable
+
+```bash
+python -m idp470_pipeline pdf-summary ^
+  --input-jsonl outputs/parsed_records.jsonl ^
+  --output-pdf outputs/synthese_comptable.pdf
 ```
 
 ## Pipeline complet
@@ -112,6 +120,7 @@ Sorties:
 - `outputs/parsed_records.jsonl`
 - `outputs/parsed_records.xlsx`
 - `outputs/facture_exemple.pdf`
+- `outputs/synthese_comptable.pdf`
 
 ## Streamlit
 

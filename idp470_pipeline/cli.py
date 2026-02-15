@@ -6,7 +6,7 @@ import logging
 from pathlib import Path
 
 from .deterministic_extractor import extract_contract_deterministic
-from .exporters import export_first_invoice_pdf, export_to_excel
+from .exporters import export_accounting_summary_pdf, export_first_invoice_pdf, export_to_excel
 from .genai_extractor import GenAIExtractionError, GenAISettings, extract_contract_with_genai
 from .idil_structure_rules import attach_idil_structure_rules
 from .models import ContractSpec
@@ -109,6 +109,13 @@ def _pdf_command(args: argparse.Namespace) -> int:
     return 0
 
 
+def _pdf_summary_command(args: argparse.Namespace) -> int:
+    records = load_jsonl(Path(args.input_jsonl))
+    logo = Path(args.logo) if args.logo else None
+    export_accounting_summary_pdf(records=records, output_path=Path(args.output_pdf), logo_path=logo)
+    return 0
+
+
 def _run_command(args: argparse.Namespace) -> int:
     source_path = Path(args.source)
     input_path = Path(args.input)
@@ -119,6 +126,7 @@ def _run_command(args: argparse.Namespace) -> int:
     parsed_path = output_dir / "parsed_records.jsonl"
     excel_path = output_dir / "parsed_records.xlsx"
     pdf_path = output_dir / "facture_exemple.pdf"
+    accounting_pdf_path = output_dir / "synthese_comptable.pdf"
 
     if contract_path.exists() and not args.force_extract:
         contract = _load_contract(contract_path)
@@ -174,8 +182,14 @@ def _run_command(args: argparse.Namespace) -> int:
     try:
         logo = Path(args.logo) if args.logo else None
         export_first_invoice_pdf(records=records, output_path=pdf_path, logo_path=logo)
-    except RuntimeError as error:
+    except (RuntimeError, ValueError) as error:
         LOGGER.warning("PDF not generated: %s", error)
+
+    try:
+        logo = Path(args.logo) if args.logo else None
+        export_accounting_summary_pdf(records=records, output_path=accounting_pdf_path, logo_path=logo)
+    except (RuntimeError, ValueError) as error:
+        LOGGER.warning("Accounting summary PDF not generated: %s", error)
 
     return 0
 
@@ -229,6 +243,12 @@ def build_parser() -> argparse.ArgumentParser:
     pdf.add_argument("--output-pdf", required=True, help="PDF output path.")
     pdf.add_argument("--logo", default=None, help="Optional logo path.")
     pdf.set_defaults(handler=_pdf_command)
+
+    pdf_summary = subparsers.add_parser("pdf-summary", help="Generate accounting summary PDF from parsed JSONL.")
+    pdf_summary.add_argument("--input-jsonl", required=True, help="Parsed JSONL input.")
+    pdf_summary.add_argument("--output-pdf", required=True, help="PDF output path.")
+    pdf_summary.add_argument("--logo", default=None, help="Optional logo path.")
+    pdf_summary.set_defaults(handler=_pdf_summary_command)
 
     run = subparsers.add_parser("run", help="Run extraction + parsing + Excel + PDF.")
     run.add_argument("--source", required=True, help="Source code path for structure extraction (main source).")

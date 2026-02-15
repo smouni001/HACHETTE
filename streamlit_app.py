@@ -10,7 +10,7 @@ from typing import Any
 import streamlit as st
 
 from idp470_pipeline.deterministic_extractor import extract_contract_deterministic
-from idp470_pipeline.exporters import export_first_invoice_pdf, export_to_excel
+from idp470_pipeline.exporters import export_accounting_summary_pdf, export_first_invoice_pdf, export_to_excel
 from idp470_pipeline.genai_extractor import GenAIExtractionError, GenAISettings, extract_contract_with_genai
 from idp470_pipeline.idil_structure_rules import attach_idil_structure_rules
 from idp470_pipeline.models import ContractSpec
@@ -326,19 +326,33 @@ def _run_pipeline(
         excel_path = workdir / "parsed_records.xlsx"
         export_to_excel(records=records, output_path=excel_path, contract=contract)
 
-        pdf_path = workdir / "facture_exemple.pdf"
-        pdf_bytes: bytes | None = None
-        pdf_error: str | None = None
+        invoice_pdf_path = workdir / "facture_exemple.pdf"
+        invoice_pdf_bytes: bytes | None = None
+        invoice_pdf_error: str | None = None
         try:
             configured_logo = Path(settings.default_logo_path).expanduser()
             export_first_invoice_pdf(
                 records=records,
-                output_path=pdf_path,
+                output_path=invoice_pdf_path,
                 logo_path=configured_logo,
             )
-            pdf_bytes = pdf_path.read_bytes()
+            invoice_pdf_bytes = invoice_pdf_path.read_bytes()
         except Exception as exc:  # noqa: BLE001
-            pdf_error = str(exc)
+            invoice_pdf_error = str(exc)
+
+        summary_pdf_path = workdir / "synthese_comptable.pdf"
+        summary_pdf_bytes: bytes | None = None
+        summary_pdf_error: str | None = None
+        try:
+            configured_logo = Path(settings.default_logo_path).expanduser()
+            export_accounting_summary_pdf(
+                records=records,
+                output_path=summary_pdf_path,
+                logo_path=configured_logo,
+            )
+            summary_pdf_bytes = summary_pdf_path.read_bytes()
+        except Exception as exc:  # noqa: BLE001
+            summary_pdf_error = str(exc)
 
         ent_invoices = {
             str(record.get("NUFAC", "")).strip()
@@ -358,8 +372,10 @@ def _run_pipeline(
 
         return {
             "excel": excel_path.read_bytes(),
-            "pdf": pdf_bytes,
-            "pdf_error": pdf_error,
+            "pdf_factures": invoice_pdf_bytes,
+            "pdf_factures_error": invoice_pdf_error,
+            "pdf_synthese": summary_pdf_bytes,
+            "pdf_synthese_error": summary_pdf_error,
             "invoice_count": invoice_count,
             "line_count": line_count,
         }
@@ -469,9 +485,14 @@ def main() -> None:
         return
 
     _metrics_panel(result)
+    pdf_factures = result.get("pdf_factures", result.get("pdf"))
+    pdf_factures_error = result.get("pdf_factures_error", result.get("pdf_error"))
+    pdf_synthese = result.get("pdf_synthese")
+    pdf_synthese_error = result.get("pdf_synthese_error")
+
     st.markdown('<div class="section-card">', unsafe_allow_html=True)
     st.markdown('<p class="section-title"><b>Telechargements</b></p>', unsafe_allow_html=True)
-    col_excel, col_pdf = st.columns(2)
+    col_excel, col_pdf_factures, col_pdf_synthese = st.columns(3)
     with col_excel:
         st.download_button(
             "Telecharger Excel",
@@ -480,17 +501,28 @@ def main() -> None:
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             use_container_width=True,
         )
-    with col_pdf:
-        if result["pdf"] is not None:
+    with col_pdf_factures:
+        if pdf_factures is not None:
             st.download_button(
-                "Telecharger PDF",
-                data=result["pdf"],
+                "Telecharger PDF factures",
+                data=pdf_factures,
                 file_name="facture_exemple.pdf",
                 mime="application/pdf",
                 use_container_width=True,
             )
         else:
-            st.warning(f"PDF non genere: {result['pdf_error']}")
+            st.warning(f"PDF factures non genere: {pdf_factures_error}")
+    with col_pdf_synthese:
+        if pdf_synthese is not None:
+            st.download_button(
+                "Telecharger PDF synthese",
+                data=pdf_synthese,
+                file_name="synthese_comptable.pdf",
+                mime="application/pdf",
+                use_container_width=True,
+            )
+        else:
+            st.warning(f"PDF synthese non genere: {pdf_synthese_error}")
     st.markdown("</div>", unsafe_allow_html=True)
 
 
