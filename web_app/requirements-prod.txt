@@ -1,0 +1,11 @@
+pydantic>=2.7
+pandas>=2.2
+openpyxl>=3.1
+reportlab>=4.2
+pypdf>=5.1
+openai>=1.40
+anthropic>=0.39
+fastapi>=0.115
+uvicorn[standard]>=0.30
+python-multipart>=0.0.9
+

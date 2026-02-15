@@ -1,0 +1,41 @@
+{
+  "family": "__APP_NAME__",
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": ["FARGATE"],
+  "cpu": "1024",
+  "memory": "2048",
+  "executionRoleArn": "arn:aws:iam::__AWS_ACCOUNT_ID__:role/__APP_NAME__-ecs-exec-role",
+  "taskRoleArn": "arn:aws:iam::__AWS_ACCOUNT_ID__:role/__APP_NAME__-ecs-task-role",
+  "containerDefinitions": [
+    {
+      "name": "__APP_NAME__",
+      "image": "__AWS_ACCOUNT_ID__.dkr.ecr.__AWS_REGION__.amazonaws.com/__APP_NAME__:latest",
+      "essential": true,
+      "portMappings": [
+        {
+          "containerPort": 8000,
+          "hostPort": 8000,
+          "protocol": "tcp"
+        }
+      ],
+      "environment": [
+        { "name": "IDP470_WEB_SOURCE", "value": "/app/IDP470RA.pli" },
+        { "name": "IDP470_WEB_SPEC_PDF", "value": "/app/2785 - DOCTECHN - Dilifac - Format IDIL.pdf" },
+        { "name": "IDP470_WEB_LOGO", "value": "/app/assets/logo_hachette_livre.png" },
+        { "name": "IDP470_WEB_JOBS_DIR", "value": "/app/web_app/jobs" },
+        { "name": "IDP470_WEB_INPUT_ENCODING", "value": "latin-1" },
+        { "name": "IDP470_WEB_CONTINUE_ON_ERROR", "value": "false" },
+        { "name": "UVICORN_WORKERS", "value": "2" }
+      ],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-create-group": "true",
+          "awslogs-group": "/ecs/__APP_NAME__",
+          "awslogs-region": "__AWS_REGION__",
+          "awslogs-stream-prefix": "ecs"
+        }
+      }
+    }
+  ]
+}

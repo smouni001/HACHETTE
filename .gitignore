@@ -19,6 +19,8 @@ outputs*/
 *.xlsx
 *.pdf
 *.jsonl
+web_app/jobs/
+web_app/deploy/taskdef.rendered.json
 
 # OS / IDE
 .DS_Store

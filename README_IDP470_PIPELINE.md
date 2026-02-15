@@ -128,6 +128,29 @@ Sorties:
 streamlit run streamlit_app.py
 ```
 
+## Version Web (FastAPI)
+
+Starter web disponible dans `web_app/`:
+
+```bash
+python -m pip install -r web_app/requirements.txt
+python -m uvicorn web_app.backend.main:app --host 0.0.0.0 --port 8000 --reload
+```
+
+Interface web:
+
+- `http://localhost:8000`
+
+Option Docker local:
+
+```bash
+docker compose up --build
+```
+
+Guide AWS ECS Fargate:
+
+- `web_app/deploy/aws-ecs-fargate.md`
+
 Pour masquer la barre superieure:
 
 1. Config locale: `.streamlit/config.toml` (deja fourni)

@@ -1,0 +1,20 @@
+services:
+  idil-web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: idil-papyrus-web
+    ports:
+      - "8000:8000"
+    environment:
+      IDP470_WEB_SOURCE: /app/IDP470RA.pli
+      IDP470_WEB_SPEC_PDF: /app/2785 - DOCTECHN - Dilifac - Format IDIL.pdf
+      IDP470_WEB_LOGO: /app/assets/logo_hachette_livre.png
+      IDP470_WEB_JOBS_DIR: /app/web_app/jobs
+      IDP470_WEB_INPUT_ENCODING: latin-1
+      IDP470_WEB_CONTINUE_ON_ERROR: "false"
+      UVICORN_WORKERS: "2"
+    volumes:
+      - ./web_app/jobs:/app/web_app/jobs
+    restart: unless-stopped
+
