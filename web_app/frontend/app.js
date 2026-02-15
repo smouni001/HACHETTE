@@ -45,6 +45,7 @@ let catalogProfiles = [];
 let localProgramId = null;
 const CATALOG_CACHE_TTL_MS = 5 * 60 * 1000;
 const LOCAL_PROGRAM_OPTION_VALUE = "__local_program__";
+const CATALOG_REQUEST_TIMEOUT_MS = 25000;
 
 const STATUS_CONFIG = {
   queued: { label: "En attente", badgeClass: "is-queued" },
@@ -185,6 +186,16 @@ function setCatalogStatus(message, isLoading = false) {
   }
   catalogStatus.textContent = message || "";
   catalogStatus.classList.toggle("is-loading", Boolean(isLoading));
+}
+
+async function fetchWithTimeout(url, options = {}, timeoutMs = CATALOG_REQUEST_TIMEOUT_MS) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...options, signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 function formatCatalogReadyMessage(count, advancedMode, sourceProgram) {
@@ -655,7 +666,7 @@ async function loadCatalog(preferredSelection = null) {
   const advancedMode = isAdvancedModeEnabled();
   setCatalogStatus("Analyse des flux du programme en cours...", true);
   try {
-    const response = await fetch(
+    const response = await fetchWithTimeout(
       `/api/catalog?program_id=${encodeURIComponent(programId)}&advanced=${advancedMode ? "true" : "false"}`,
     );
     if (!response.ok) {
@@ -669,12 +680,13 @@ async function loadCatalog(preferredSelection = null) {
     catalogSourceProgram = payload?.source_program || "programme";
     catalogProfiles = Array.isArray(payload.profiles) ? payload.profiles : [];
     if (catalogProfiles.length === 0) {
-      fallbackCatalog();
-      if (preferredSelection) {
-        loadFlowOptions(preferredSelection.flow_type, preferredSelection.file_name);
-      } else {
-        loadFlowOptions("output", "FICDEMA");
-      }
+      flowTypeSelect.innerHTML = "";
+      fileNameSelect.innerHTML = "";
+      renderProfileContext(null);
+      launchBtn.disabled = true;
+      setCatalogStatus(
+        `Aucun flux exploitable detecte pour ${catalogSourceProgram}. Chargez un autre programme ou activez la vue globale.`,
+      );
       return;
     }
     const preferredFlow = String(preferredSelection?.flow_type || payload.default_flow_type || "output").toLowerCase();
@@ -692,6 +704,9 @@ async function loadCatalog(preferredSelection = null) {
       loadFlowOptions("output", "FICDEMA");
     }
     setError("Catalogue non charge. Mode de secours active.");
+    if (String(error?.name || "") === "AbortError") {
+      setError("Le chargement du catalogue a depasse le delai. Verifiez le programme source puis relancez.");
+    }
     setCatalogStatus(
       `Mode secours actif: ${catalogProfiles.length} fichier(s) affiche(s), verification structurelle indisponible.`,
     );
