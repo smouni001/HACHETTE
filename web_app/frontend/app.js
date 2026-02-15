@@ -1,4 +1,5 @@
 const form = document.getElementById("jobForm");
+const programSelect = document.getElementById("programId");
 const flowTypeSelect = document.getElementById("flowType");
 const fileNameSelect = document.getElementById("fileName");
 const advancedModeToggle = document.getElementById("advancedMode");
@@ -34,6 +35,8 @@ const downloadPdfSynthese = document.getElementById("downloadPdfSynthese");
 
 let activeJobId = null;
 let pollTimer = null;
+let catalogSourceProgram = "programme";
+let knownPrograms = [];
 let catalogProfiles = [];
 const CATALOG_CACHE_TTL_MS = 5 * 60 * 1000;
 
@@ -108,6 +111,7 @@ function setWarnings(warnings) {
 function setBusy(isBusy) {
   launchBtn.disabled = isBusy;
   fileInput.disabled = isBusy;
+  programSelect.disabled = isBusy;
   flowTypeSelect.disabled = isBusy;
   fileNameSelect.disabled = isBusy;
   advancedModeToggle.disabled = isBusy;
@@ -115,13 +119,18 @@ function setBusy(isBusy) {
   setAdvancedModeIndicator();
 }
 
-function cacheKeyForCatalog(advancedMode) {
-  return advancedMode ? "idil.catalog.advanced" : "idil.catalog.standard";
+function currentProgramId() {
+  return String(programSelect?.value || knownPrograms?.[0]?.program_id || "idp470ra").toLowerCase();
 }
 
-function readCatalogCache(advancedMode) {
+function cacheKeyForCatalog(programId, advancedMode) {
+  const safeProgramId = String(programId || "default").toLowerCase();
+  return advancedMode ? `idil.catalog.${safeProgramId}.advanced` : `idil.catalog.${safeProgramId}.standard`;
+}
+
+function readCatalogCache(programId, advancedMode) {
   try {
-    const raw = localStorage.getItem(cacheKeyForCatalog(advancedMode));
+    const raw = localStorage.getItem(cacheKeyForCatalog(programId, advancedMode));
     if (!raw) {
       return null;
     }
@@ -139,10 +148,10 @@ function readCatalogCache(advancedMode) {
   }
 }
 
-function writeCatalogCache(advancedMode, payload) {
+function writeCatalogCache(programId, advancedMode, payload) {
   try {
     localStorage.setItem(
-      cacheKeyForCatalog(advancedMode),
+      cacheKeyForCatalog(programId, advancedMode),
       JSON.stringify({
         timestamp: Date.now(),
         profiles: payload?.profiles || [],
@@ -163,15 +172,68 @@ function setCatalogStatus(message, isLoading = false) {
   catalogStatus.classList.toggle("is-loading", Boolean(isLoading));
 }
 
-function formatCatalogReadyMessage(count, advancedMode) {
+function formatCatalogReadyMessage(count, advancedMode, sourceProgram) {
   const safeCount = Number.isFinite(count) ? count : 0;
+  const safeProgram = sourceProgram || "programme";
   if (advancedMode) {
-    return `Mode avance actif: ${safeCount} flux Input/Output disponible(s).`;
+    return `Mode avance actif (${safeProgram}): ${safeCount} flux Input/Output disponible(s).`;
   }
   return (
-    `Mode standard actif: ${safeCount} fichier(s) de facturation disponible(s). ` +
+    `Mode standard actif (${safeProgram}): ${safeCount} fichier(s) de facturation disponible(s). ` +
     "Activez le mode avance pour afficher tous les flux."
   );
+}
+
+function fallbackPrograms() {
+  knownPrograms = [
+    {
+      program_id: "idp470ra",
+      display_name: "IDIL470 PROJET PAPYRUS",
+      source_program: "IDP470RA",
+      analyzer_engine: "idp470_pli",
+      source_path: "IDP470RA.pli",
+      invoice_only_default: true,
+    },
+  ];
+}
+
+function rebuildProgramOptions(defaultProgramId = "idp470ra") {
+  const wanted = String(defaultProgramId || "idp470ra").toLowerCase();
+  programSelect.innerHTML = "";
+  knownPrograms.forEach((item) => {
+    const option = document.createElement("option");
+    option.value = item.program_id;
+    option.textContent = `${item.display_name || item.program_id} (${item.source_program || "-"})`;
+    programSelect.appendChild(option);
+  });
+  if (!knownPrograms.length) {
+    return;
+  }
+  const found = knownPrograms.some((item) => item.program_id === wanted);
+  programSelect.value = found ? wanted : knownPrograms[0].program_id;
+}
+
+async function loadPrograms() {
+  try {
+    const response = await fetch("/api/programs");
+    if (!response.ok) {
+      throw new Error("Programme indisponible");
+    }
+    const payload = await response.json();
+    knownPrograms = Array.isArray(payload.programs) ? payload.programs : [];
+    if (!knownPrograms.length) {
+      fallbackPrograms();
+      rebuildProgramOptions("idp470ra");
+      return "idp470ra";
+    }
+    rebuildProgramOptions(String(payload.default_program_id || knownPrograms[0].program_id).toLowerCase());
+    return currentProgramId();
+  } catch (error) {
+    fallbackPrograms();
+    rebuildProgramOptions("idp470ra");
+    setError("Liste des programmes indisponible. Programme par defaut active.");
+    return "idp470ra";
+  }
 }
 
 function setMetricValue(element, value) {
@@ -490,15 +552,19 @@ function loadFlowOptions(defaultFlowType = "output", defaultFileName = "FICDEMA"
 }
 
 async function loadCatalog(preferredSelection = null) {
+  const programId = currentProgramId();
   const advancedMode = isAdvancedModeEnabled();
-  setCatalogStatus("Analyse des flux IDP470RA en cours...", true);
+  setCatalogStatus("Analyse des flux du programme en cours...", true);
   try {
-    const response = await fetch(`/api/catalog?advanced=${advancedMode ? "true" : "false"}`);
+    const response = await fetch(
+      `/api/catalog?program_id=${encodeURIComponent(programId)}&advanced=${advancedMode ? "true" : "false"}`,
+    );
     if (!response.ok) {
       throw new Error("Catalogue indisponible");
     }
     const payload = await response.json();
-    writeCatalogCache(advancedMode, payload);
+    writeCatalogCache(programId, advancedMode, payload);
+    catalogSourceProgram = payload?.source_program || "programme";
     catalogProfiles = Array.isArray(payload.profiles) ? payload.profiles : [];
     if (catalogProfiles.length === 0) {
       fallbackCatalog();
@@ -515,7 +581,7 @@ async function loadCatalog(preferredSelection = null) {
       preferredFlow,
       preferredFile,
     );
-    setCatalogStatus(formatCatalogReadyMessage(catalogProfiles.length, advancedMode));
+    setCatalogStatus(formatCatalogReadyMessage(catalogProfiles.length, advancedMode, catalogSourceProgram));
   } catch (error) {
     fallbackCatalog();
     if (preferredSelection) {
@@ -525,7 +591,7 @@ async function loadCatalog(preferredSelection = null) {
     }
     setError("Catalogue non charge. Mode de secours active.");
     setCatalogStatus(
-      `Mode secours actif: ${catalogProfiles.length} fichier(s) affiche(s), verification IDP470RA indisponible.`,
+      `Mode secours actif: ${catalogProfiles.length} fichier(s) affiche(s), verification structurelle indisponible.`,
     );
   }
 }
@@ -536,6 +602,11 @@ flowTypeSelect.addEventListener("change", () => {
 
 fileNameSelect.addEventListener("change", () => {
   updateUploadLabel();
+});
+
+programSelect.addEventListener("change", () => {
+  setError("");
+  loadCatalog();
 });
 
 advancedModeToggle.addEventListener("change", () => {
@@ -574,6 +645,7 @@ form.addEventListener("submit", async (event) => {
   }
 
   const formData = new FormData();
+  formData.append("program_id", currentProgramId());
   formData.append("flow_type", profile.flow_type);
   formData.append("file_name", profile.file_name);
   formData.append("advanced_mode", advancedMode ? "true" : "false");
@@ -609,10 +681,13 @@ form.addEventListener("submit", async (event) => {
   }
 });
 
-(function initCatalog() {
+(async function initCatalog() {
   setAdvancedModeIndicator();
+  const selectedProgramId = await loadPrograms();
+  const selectedProgram = knownPrograms.find((item) => item.program_id === selectedProgramId);
+  catalogSourceProgram = selectedProgram?.source_program || "programme";
   const advancedMode = isAdvancedModeEnabled();
-  const cached = readCatalogCache(advancedMode);
+  const cached = readCatalogCache(selectedProgramId, advancedMode);
   if (cached && Array.isArray(cached.profiles) && cached.profiles.length > 0) {
     catalogProfiles = cached.profiles;
     loadFlowOptions(
@@ -620,18 +695,14 @@ form.addEventListener("submit", async (event) => {
       String(cached.default_file_name || "FICDEMA").toUpperCase(),
     );
     setCatalogStatus(
-      `${formatCatalogReadyMessage(catalogProfiles.length, advancedMode)} (charge rapidement depuis le cache local)`,
+      `${formatCatalogReadyMessage(catalogProfiles.length, advancedMode, catalogSourceProgram)} (charge rapidement depuis le cache local)`,
     );
-    loadCatalog().catch(() => {});
+    await loadCatalog();
     return;
   }
 
   fallbackCatalog();
   loadFlowOptions("output", "FICDEMA");
   setCatalogStatus("Initialisation du catalogue...", true);
-  loadCatalog().catch(() => {
-    setCatalogStatus(
-      `Mode secours actif: ${catalogProfiles.length} fichier(s) affiche(s), verification IDP470RA indisponible.`,
-    );
-  });
+  await loadCatalog();
 })();

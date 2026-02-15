@@ -10,7 +10,7 @@
       href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="/app.css?v=20260215-9" />
+    <link rel="stylesheet" href="/app.css?v=20260215-10" />
   </head>
   <body>
     <main class="page">
@@ -24,8 +24,14 @@
 
       <section class="panel panel-form">
         <h2>Lancer un traitement</h2>
-        <p class="hint">Par defaut, seuls les fichiers Factures sont proposes. Activez le mode avance pour afficher tous les flux detectes dans IDP470RA.</p>
+        <p class="hint">Selectionnez un programme, puis le flux et le fichier logique. Par defaut, seuls les fichiers Factures sont proposes.</p>
         <form id="jobForm" class="job-form">
+          <div class="form-row form-row-program">
+            <div class="field-wide">
+              <label for="programId" class="file-label">Programme source</label>
+              <select id="programId" name="programId" required></select>
+            </div>
+          </div>
           <div class="form-row">
             <div>
               <label for="flowType" class="file-label">Type de flux</label>
@@ -41,7 +47,7 @@
             <span class="switch-track" aria-hidden="true"><span class="switch-thumb"></span></span>
             <span class="switch-copy">
               <strong>Mode avance</strong>
-              <small>Afficher tous les fichiers (Input/Output)</small>
+              <small>Afficher tous les fichiers du programme (Input/Output)</small>
             </span>
             <span id="advancedModeState" class="switch-mode-badge">Standard</span>
           </label>
@@ -115,6 +121,6 @@
         </div>
       </section>
     </main>
-    <script src="/app.js?v=20260215-9"></script>
+    <script src="/app.js?v=20260215-10"></script>
   </body>
 </html>

@@ -1,0 +1,21 @@
+{
+  "program_id": "idp470ra",
+  "display_name": "IDIL470 PROJET PAPYRUS",
+  "description": "Programme principal de production des flux facture.",
+  "source": {
+    "path": "IDP470RA.pli",
+    "program_name": "IDP470RA",
+    "encoding": "latin-1"
+  },
+  "analyzer": {
+    "engine": "idp470_pli",
+    "spec_pdf_path": "2785 - DOCTECHN - Dilifac - Format IDIL.pdf"
+  },
+  "ui_defaults": {
+    "invoice_only": true,
+    "default_flow_type": "output",
+    "default_file_name": "FICDEMA"
+  },
+  "continue_on_error": false,
+  "reuse_contract": true
+}

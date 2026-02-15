@@ -24,15 +24,18 @@ from idp470_pipeline.parsing_engine import FixedWidthParser, save_jsonl
 
 LOGGER = logging.getLogger(__name__)
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
-SOURCE_PATH = Path(os.getenv("IDP470_WEB_SOURCE", PROJECT_ROOT / "IDP470RA.pli")).expanduser()
-SPEC_PDF_PATH = Path(
+PROGRAMS_DIR = Path(os.getenv("IDP470_WEB_PROGRAMS_DIR", PROJECT_ROOT / "web_app" / "programs")).expanduser()
+DEFAULT_SOURCE_PATH = Path(os.getenv("IDP470_WEB_SOURCE", PROJECT_ROOT / "IDP470RA.pli")).expanduser()
+DEFAULT_SOURCE_PROGRAM = os.getenv("IDP470_WEB_SOURCE_PROGRAM", "IDP470RA").strip() or "IDP470RA"
+DEFAULT_SPEC_PDF_PATH = Path(
     os.getenv("IDP470_WEB_SPEC_PDF", PROJECT_ROOT / "2785 - DOCTECHN - Dilifac - Format IDIL.pdf")
 ).expanduser()
 LOGO_PATH = Path(os.getenv("IDP470_WEB_LOGO", PROJECT_ROOT / "assets" / "logo_hachette_livre.png")).expanduser()
 JOBS_ROOT = Path(os.getenv("IDP470_WEB_JOBS_DIR", PROJECT_ROOT / "web_app" / "jobs")).expanduser()
-INPUT_ENCODING = os.getenv("IDP470_WEB_INPUT_ENCODING", "latin-1")
-CONTINUE_ON_ERROR = os.getenv("IDP470_WEB_CONTINUE_ON_ERROR", "false").strip().lower() == "true"
-REUSE_CONTRACT = os.getenv("IDP470_WEB_REUSE_CONTRACT", "true").strip().lower() == "true"
+DEFAULT_INPUT_ENCODING = os.getenv("IDP470_WEB_INPUT_ENCODING", "latin-1")
+DEFAULT_CONTINUE_ON_ERROR = os.getenv("IDP470_WEB_CONTINUE_ON_ERROR", "false").strip().lower() == "true"
+DEFAULT_REUSE_CONTRACT = os.getenv("IDP470_WEB_REUSE_CONTRACT", "true").strip().lower() == "true"
+SUPPORTED_ANALYZERS = {"idp470_pli"}
 
 JOBS_ROOT.mkdir(parents=True, exist_ok=True)
 
@@ -45,6 +48,8 @@ def _utc_now() -> str:
 class JobState:
     job_id: str
     input_filename: str
+    program_id: str = "idp470ra"
+    program_display_name: str = "IDIL470 PROJET PAPYRUS"
     flow_type: str = "output"
     file_name: str = "FICDEMA"
     view_mode: str = "invoice"
@@ -71,6 +76,8 @@ class JobState:
 
 @dataclass(frozen=True)
 class FlowProfile:
+    program_id: str
+    source_program: str
     flow_type: str
     file_name: str
     display_name: str
@@ -88,7 +95,52 @@ class FlowProfile:
 
     @property
     def cache_key(self) -> str:
-        return f"{self.flow_type}:{self.file_name}"
+        return f"{self.program_id}:{self.flow_type}:{self.file_name}"
+
+
+class ProgramSourceConfig(BaseModel):
+    path: str
+    program_name: str = "IDP470RA"
+    encoding: str = "latin-1"
+
+
+class ProgramAnalyzerConfig(BaseModel):
+    engine: str = "idp470_pli"
+    spec_pdf_path: str | None = None
+
+
+class ProgramUiDefaultsConfig(BaseModel):
+    invoice_only: bool = True
+    default_flow_type: str = "output"
+    default_file_name: str = "FICDEMA"
+
+
+class ProgramDefinitionConfig(BaseModel):
+    program_id: str
+    display_name: str
+    description: str = ""
+    source: ProgramSourceConfig
+    analyzer: ProgramAnalyzerConfig = Field(default_factory=ProgramAnalyzerConfig)
+    ui_defaults: ProgramUiDefaultsConfig = Field(default_factory=ProgramUiDefaultsConfig)
+    continue_on_error: bool = DEFAULT_CONTINUE_ON_ERROR
+    reuse_contract: bool = DEFAULT_REUSE_CONTRACT
+
+
+@dataclass(frozen=True)
+class ProgramRuntime:
+    program_id: str
+    display_name: str
+    description: str
+    source_program: str
+    source_path: Path
+    source_encoding: str
+    analyzer_engine: str
+    spec_pdf_path: Path | None
+    invoice_only_default: bool
+    default_flow_type: str
+    default_file_name: str
+    continue_on_error: bool
+    reuse_contract: bool
 
 
 _DCL_FILE_RE = re.compile(r"\bDCL\s+([A-Z0-9_]+)\s+FILE\b([^;]*);", re.IGNORECASE)
@@ -110,7 +162,9 @@ _TRAILING_SEQ_RE = re.compile(r"\s+\d{5,}\s*$")
 
 _JOBS: dict[str, JobState] = {}
 _JOBS_LOCK = threading.Lock()
-_FLOW_PROFILES_CACHE: dict[tuple[str, str], FlowProfile] | None = None
+_PROGRAMS_CACHE: dict[str, ProgramRuntime] | None = None
+_PROGRAMS_LOCK = threading.Lock()
+_FLOW_PROFILES_CACHE: dict[str, dict[tuple[str, str], FlowProfile]] = {}
 _FLOW_PROFILES_LOCK = threading.Lock()
 _CONTRACT_CACHE: dict[str, Any] = {}
 _CONTRACT_LOCK = threading.Lock()
@@ -136,6 +190,105 @@ def _get_job_or_404(job_id: str) -> JobState:
     if job is None:
         raise HTTPException(status_code=404, detail=f"Job introuvable: {job_id}")
     return job
+
+
+def _resolve_project_path(value: str | Path) -> Path:
+    path = Path(value).expanduser()
+    if path.is_absolute():
+        return path
+    return (PROJECT_ROOT / path).resolve()
+
+
+def _default_program_runtime() -> ProgramRuntime:
+    spec_pdf = DEFAULT_SPEC_PDF_PATH if DEFAULT_SPEC_PDF_PATH.exists() else None
+    return ProgramRuntime(
+        program_id="idp470ra",
+        display_name="IDIL470 PROJET PAPYRUS",
+        description="Programme principal de traitement facturation.",
+        source_program=DEFAULT_SOURCE_PROGRAM,
+        source_path=DEFAULT_SOURCE_PATH,
+        source_encoding=DEFAULT_INPUT_ENCODING,
+        analyzer_engine="idp470_pli",
+        spec_pdf_path=spec_pdf,
+        invoice_only_default=True,
+        default_flow_type="output",
+        default_file_name="FICDEMA",
+        continue_on_error=DEFAULT_CONTINUE_ON_ERROR,
+        reuse_contract=DEFAULT_REUSE_CONTRACT,
+    )
+
+
+def _load_program_registry() -> dict[str, ProgramRuntime]:
+    runtimes: dict[str, ProgramRuntime] = {}
+    if PROGRAMS_DIR.exists():
+        for config_path in sorted(PROGRAMS_DIR.glob("*.json")):
+            if config_path.name.endswith(".example.json"):
+                continue
+            try:
+                payload = json.loads(config_path.read_text(encoding="utf-8"))
+                config = ProgramDefinitionConfig.model_validate(payload)
+                engine = config.analyzer.engine.strip().lower()
+                if engine not in SUPPORTED_ANALYZERS:
+                    LOGGER.warning(
+                        "Programme ignore (%s): moteur non supporte '%s'.",
+                        config_path.name,
+                        engine,
+                    )
+                    continue
+                program_id = config.program_id.strip().lower()
+                runtime = ProgramRuntime(
+                    program_id=program_id,
+                    display_name=config.display_name.strip() or config.program_id.strip(),
+                    description=config.description.strip(),
+                    source_program=config.source.program_name.strip() or config.program_id.strip(),
+                    source_path=_resolve_project_path(config.source.path),
+                    source_encoding=config.source.encoding.strip() or DEFAULT_INPUT_ENCODING,
+                    analyzer_engine=engine,
+                    spec_pdf_path=_resolve_project_path(config.analyzer.spec_pdf_path)
+                    if config.analyzer.spec_pdf_path
+                    else None,
+                    invoice_only_default=config.ui_defaults.invoice_only,
+                    default_flow_type=config.ui_defaults.default_flow_type.strip().lower() or "output",
+                    default_file_name=config.ui_defaults.default_file_name.strip().upper() or "FICDEMA",
+                    continue_on_error=config.continue_on_error,
+                    reuse_contract=config.reuse_contract,
+                )
+                runtimes[program_id] = runtime
+            except Exception as error:  # noqa: BLE001
+                LOGGER.warning("Programme ignore (%s): %s", config_path.name, error)
+
+    if not runtimes:
+        fallback = _default_program_runtime()
+        runtimes[fallback.program_id] = fallback
+    return runtimes
+
+
+def _get_programs() -> dict[str, ProgramRuntime]:
+    global _PROGRAMS_CACHE
+    with _PROGRAMS_LOCK:
+        if _PROGRAMS_CACHE is None:
+            _PROGRAMS_CACHE = _load_program_registry()
+        return _PROGRAMS_CACHE
+
+
+def _get_default_program() -> ProgramRuntime:
+    programs = _get_programs()
+    preferred = programs.get("idp470ra")
+    if preferred is not None:
+        return preferred
+    return next(iter(programs.values()))
+
+
+def _resolve_program(program_id: str | None) -> ProgramRuntime:
+    if not program_id:
+        return _get_default_program()
+    normalized = program_id.strip().lower()
+    programs = _get_programs()
+    runtime = programs.get(normalized)
+    if runtime is None:
+        allowed = ", ".join(sorted(programs.keys()))
+        raise HTTPException(status_code=400, detail=f"Programme inconnu '{program_id}'. Programmes autorises: {allowed}")
+    return runtime
 
 
 def _invoice_count(records: list[dict[str, Any]]) -> int:
@@ -215,9 +368,9 @@ def _safe_logo_path() -> Path | None:
     return None
 
 
-def _safe_spec_pdf_path() -> Path | None:
-    if SPEC_PDF_PATH.exists():
-        return SPEC_PDF_PATH
+def _safe_spec_pdf_path(program: ProgramRuntime) -> Path | None:
+    if program.spec_pdf_path and program.spec_pdf_path.exists():
+        return program.spec_pdf_path
     return None
 
 
@@ -234,9 +387,9 @@ def _safe_media_type(path: Path) -> str:
     return "application/octet-stream"
 
 
-def _sample_lines_from_payload(payload: bytes, *, max_lines: int = 250) -> list[str]:
+def _sample_lines_from_payload(payload: bytes, *, input_encoding: str, max_lines: int = 250) -> list[str]:
     try:
-        decoded = payload.decode(INPUT_ENCODING, errors="replace")
+        decoded = payload.decode(input_encoding, errors="replace")
     except Exception:  # noqa: BLE001
         decoded = payload.decode("latin-1", errors="replace")
 
@@ -289,11 +442,11 @@ def _closest_length_gap(contract: Any, median_len: int) -> tuple[int, int]:
     return closest_gap, max_expected
 
 
-def _compatibility_score(profile: FlowProfile, lines: list[str]) -> float:
+def _compatibility_score(program: ProgramRuntime, profile: FlowProfile, lines: list[str]) -> float:
     if not lines:
         return 0.0
     try:
-        contract = _get_contract(profile)
+        contract = _get_contract(program, profile)
     except Exception:  # noqa: BLE001
         return 0.0
 
@@ -308,21 +461,21 @@ def _compatibility_score(profile: FlowProfile, lines: list[str]) -> float:
     return round(max(selector_ratio, 0.15) * 0.6 + length_score * 0.4, 4)
 
 
-def _suggest_better_profile(profile: FlowProfile, lines: list[str]) -> FlowProfile | None:
+def _suggest_better_profile(program: ProgramRuntime, profile: FlowProfile, lines: list[str]) -> FlowProfile | None:
     if not lines:
         return None
 
-    selected_score = _compatibility_score(profile, lines)
+    selected_score = _compatibility_score(program, profile, lines)
     best_profile: FlowProfile | None = None
     best_score = 0.0
-    for candidate in _get_flow_profiles().values():
+    for candidate in _get_flow_profiles(program.program_id).values():
         if candidate.flow_type != profile.flow_type:
             continue
         if candidate.file_name == profile.file_name:
             continue
         if not candidate.supports_processing:
             continue
-        candidate_score = _compatibility_score(candidate, lines)
+        candidate_score = _compatibility_score(program, candidate, lines)
         if candidate_score > best_score:
             best_score = candidate_score
             best_profile = candidate
@@ -336,23 +489,23 @@ def _suggest_better_profile(profile: FlowProfile, lines: list[str]) -> FlowProfi
     return best_profile
 
 
-def _blocked_structure_message(profile: FlowProfile, base_reason: str, lines: list[str]) -> str:
-    suggestion = _suggest_better_profile(profile, lines)
+def _blocked_structure_message(program: ProgramRuntime, profile: FlowProfile, base_reason: str, lines: list[str]) -> str:
+    suggestion = _suggest_better_profile(program, profile, lines)
     if suggestion is None:
         return (
             f"Chargement bloque pour {profile.flow_type}/{profile.file_name}: {base_reason} "
-            "Le contenu du fichier ne respecte pas la structure IDP470RA attendue."
+            f"Le contenu du fichier ne respecte pas la structure {program.source_program} attendue."
         )
     return (
         f"Chargement bloque pour {profile.flow_type}/{profile.file_name}: {base_reason} "
         f"Le contenu ressemble plutot a {suggestion.flow_type}/{suggestion.file_name} "
-        "d'apres la signature structurelle IDP470RA."
+        f"d'apres la signature structurelle {program.source_program}."
     )
 
 
-def _validate_uploaded_payload_for_profile(profile: FlowProfile, payload: bytes) -> None:
-    contract = _get_contract(profile)
-    lines = _sample_lines_from_payload(payload)
+def _validate_uploaded_payload_for_profile(program: ProgramRuntime, profile: FlowProfile, payload: bytes) -> None:
+    contract = _get_contract(program, profile)
+    lines = _sample_lines_from_payload(payload, input_encoding=program.source_encoding)
     if not lines:
         raise HTTPException(status_code=400, detail="Le fichier charge ne contient aucune ligne exploitable.")
 
@@ -366,6 +519,7 @@ def _validate_uploaded_payload_for_profile(profile: FlowProfile, payload: bytes)
             raise HTTPException(
                 status_code=400,
                 detail=_blocked_structure_message(
+                    program,
                     profile,
                     f"signature des enregistrements attendue ({selectors}) non detectee.",
                     lines,
@@ -375,6 +529,7 @@ def _validate_uploaded_payload_for_profile(profile: FlowProfile, payload: bytes)
             raise HTTPException(
                 status_code=400,
                 detail=_blocked_structure_message(
+                    program,
                     profile,
                     f"longueur mediane {median_len}, attendu proche de {max_expected}.",
                     lines,
@@ -388,6 +543,7 @@ def _validate_uploaded_payload_for_profile(profile: FlowProfile, payload: bytes)
             raise HTTPException(
                 status_code=400,
                 detail=_blocked_structure_message(
+                    program,
                     profile,
                     f"longueur mediane {median_len}, attendu proche de {max_expected}.",
                     lines,
@@ -400,6 +556,7 @@ def _validate_uploaded_payload_for_profile(profile: FlowProfile, payload: bytes)
         raise HTTPException(
             status_code=400,
             detail=_blocked_structure_message(
+                program,
                 profile,
                 "aucune signature d'enregistrement detectee sur l'echantillon.",
                 lines,
@@ -444,8 +601,8 @@ def _infer_role_label(*, file_name: str, description: str, structures: tuple[str
     return "fichier metier"
 
 
-def _discover_flow_profiles() -> dict[tuple[str, str], FlowProfile]:
-    text = SOURCE_PATH.read_text(encoding="latin-1")
+def _discover_flow_profiles(program: ProgramRuntime) -> dict[tuple[str, str], FlowProfile]:
+    text = program.source_path.read_text(encoding=program.source_encoding)
     declarations: dict[str, tuple[str, str]] = {}
     file_to_structures: dict[str, set[str]] = defaultdict(set)
     aliases_by_base: dict[str, set[str]] = defaultdict(set)
@@ -522,6 +679,8 @@ def _discover_flow_profiles() -> dict[tuple[str, str], FlowProfile]:
         supports_processing = bool(structure_prefixes or structure_names)
 
         profiles[(flow_type, file_name)] = FlowProfile(
+            program_id=program.program_id,
+            source_program=program.source_program,
             flow_type=flow_type,
             file_name=file_name,
             display_name=file_name,
@@ -541,12 +700,22 @@ def _discover_flow_profiles() -> dict[tuple[str, str], FlowProfile]:
     return profiles
 
 
-def _get_flow_profiles() -> dict[tuple[str, str], FlowProfile]:
-    global _FLOW_PROFILES_CACHE
+def _get_flow_profiles(program_id: str) -> dict[tuple[str, str], FlowProfile]:
+    program = _resolve_program(program_id)
     with _FLOW_PROFILES_LOCK:
-        if _FLOW_PROFILES_CACHE is None:
-            _FLOW_PROFILES_CACHE = _discover_flow_profiles()
-        return _FLOW_PROFILES_CACHE
+        cached = _FLOW_PROFILES_CACHE.get(program.program_id)
+        if cached is None:
+            try:
+                cached = _discover_flow_profiles(program)
+            except FileNotFoundError as error:
+                raise HTTPException(
+                    status_code=400,
+                    detail=(
+                        f"Source programme introuvable pour {program.program_id}: {program.source_path}"
+                    ),
+                ) from error
+            _FLOW_PROFILES_CACHE[program.program_id] = cached
+        return cached
 
 
 def _normalize_flow_type(flow_type: str | None) -> str:
@@ -557,10 +726,10 @@ def _normalize_file_name(file_name: str | None) -> str:
     return (file_name or "").strip().upper()
 
 
-def _resolve_profile(flow_type: str, file_name: str) -> FlowProfile:
+def _resolve_profile(program_id: str, flow_type: str, file_name: str) -> FlowProfile:
     normalized_flow = _normalize_flow_type(flow_type)
     normalized_file = _normalize_file_name(file_name)
-    profiles = _get_flow_profiles()
+    profiles = _get_flow_profiles(program_id)
     profile = profiles.get((normalized_flow, normalized_file))
     if profile is None:
         allowed = ", ".join(
@@ -573,12 +742,16 @@ def _resolve_profile(flow_type: str, file_name: str) -> FlowProfile:
     return profile
 
 
-def _build_contract(profile: FlowProfile):
+def _build_contract(program: ProgramRuntime, profile: FlowProfile):
+    if program.analyzer_engine not in SUPPORTED_ANALYZERS:
+        raise ValueError(
+            f"Moteur d'analyse non supporte '{program.analyzer_engine}' pour {program.program_id}."
+        )
     return extract_contract_deterministic(
-        source_path=SOURCE_PATH,
-        source_program="IDP470RA",
+        source_path=program.source_path,
+        source_program=program.source_program,
         strict=profile.strict_length_validation,
-        spec_pdf_path=_safe_spec_pdf_path(),
+        spec_pdf_path=_safe_spec_pdf_path(program),
         structure_prefixes=profile.structure_prefixes or None,
         structure_names=set(profile.structure_names) if profile.structure_names else None,
         preserve_structure_names=profile.preserve_structure_names,
@@ -586,36 +759,46 @@ def _build_contract(profile: FlowProfile):
     )
 
 
-def _get_contract(profile: FlowProfile):
-    if not REUSE_CONTRACT:
-        return _build_contract(profile)
+def _program_contract_cache_key(program: ProgramRuntime, profile: FlowProfile) -> str:
+    source_mtime = "na"
+    try:
+        source_mtime = str(program.source_path.stat().st_mtime_ns)
+    except Exception:  # noqa: BLE001
+        pass
+    return f"{profile.cache_key}:{source_mtime}"
+
+
+def _get_contract(program: ProgramRuntime, profile: FlowProfile):
+    if not program.reuse_contract:
+        return _build_contract(program, profile)
 
     with _CONTRACT_LOCK:
-        cached = _CONTRACT_CACHE.get(profile.cache_key)
+        key = _program_contract_cache_key(program, profile)
+        cached = _CONTRACT_CACHE.get(key)
         if cached is None:
-            cached = _build_contract(profile)
-            _CONTRACT_CACHE[profile.cache_key] = cached
+            cached = _build_contract(program, profile)
+            _CONTRACT_CACHE[key] = cached
         return cached
 
 
-def _process_job(job_id: str, input_path: Path, profile: FlowProfile) -> None:
+def _process_job(job_id: str, input_path: Path, program: ProgramRuntime, profile: FlowProfile) -> None:
     workdir = _job_dir(job_id)
     output_dir = workdir / "outputs"
     output_dir.mkdir(parents=True, exist_ok=True)
     warnings: list[str] = []
 
     try:
-        if not SOURCE_PATH.exists():
-            raise FileNotFoundError(f"Source programme introuvable: {SOURCE_PATH}")
+        if not program.source_path.exists():
+            raise FileNotFoundError(f"Source programme introuvable: {program.source_path}")
         if not profile.supports_processing:
             raise ValueError(
-                f"Aucune structure exploitable detectee pour {profile.file_name} dans IDP470RA."
+                f"Aucune structure exploitable detectee pour {profile.file_name} dans {program.source_program}."
             )
 
         _set_job(job_id, status="running", progress=10, message="Extraction du contrat en cours")
-        contract = _get_contract(profile)
+        contract = _get_contract(program, profile)
 
-        contract_path = output_dir / "idp470ra_contract.json"
+        contract_path = output_dir / f"{program.program_id}_contract.json"
         contract_path.write_text(
             json.dumps(contract.model_dump(mode="json"), ensure_ascii=False, indent=2),
             encoding="utf-8",
@@ -625,8 +808,8 @@ def _process_job(job_id: str, input_path: Path, profile: FlowProfile) -> None:
         parser = FixedWidthParser(contract)
         records, issues = parser.parse_file(
             input_path=input_path,
-            encoding=INPUT_ENCODING,
-            continue_on_error=CONTINUE_ON_ERROR,
+            encoding=program.source_encoding,
+            continue_on_error=program.continue_on_error,
         )
 
         parsed_path = output_dir / "parsed_records.jsonl"
@@ -644,6 +827,8 @@ def _process_job(job_id: str, input_path: Path, profile: FlowProfile) -> None:
             contract=contract,
             metadata={
                 "title": "IDIL PAPYRUS - Synthese de traitement",
+                "program_id": program.program_id,
+                "source_program": program.source_program,
                 "flow_type": profile.flow_type.upper(),
                 "file_name": profile.file_name,
                 "view_mode": profile.view_mode,
@@ -715,6 +900,8 @@ def _process_job(job_id: str, input_path: Path, profile: FlowProfile) -> None:
 
 class JobCreateResponse(BaseModel):
     job_id: str
+    program_id: str
+    program_display_name: str
     status: str
     message: str
     flow_type: str
@@ -725,6 +912,8 @@ class JobCreateResponse(BaseModel):
 
 class JobStatusResponse(BaseModel):
     job_id: str
+    program_id: str
+    program_display_name: str
     flow_type: str
     file_name: str
     view_mode: str
@@ -754,10 +943,27 @@ class CatalogProfileResponse(BaseModel):
     raw_structures: list[str] = Field(default_factory=list)
 
 
+class ProgramSummaryResponse(BaseModel):
+    program_id: str
+    display_name: str
+    source_program: str
+    analyzer_engine: str
+    source_path: str
+    invoice_only_default: bool
+
+
+class ProgramsResponse(BaseModel):
+    default_program_id: str
+    programs: list[ProgramSummaryResponse]
+
+
 class CatalogResponse(BaseModel):
+    program_id: str
+    program_display_name: str
     source_program: str
     default_flow_type: str
     default_file_name: str
+    invoice_only_default: bool
     advanced_mode: bool
     profiles: list[CatalogProfileResponse]
 
@@ -780,6 +986,8 @@ def _download_links(job_id: str, job: JobState) -> dict[str, str]:
 def _to_status_response(job_id: str, job: JobState) -> JobStatusResponse:
     return JobStatusResponse(
         job_id=job_id,
+        program_id=job.program_id,
+        program_display_name=job.program_display_name,
         flow_type=job.flow_type,
         file_name=job.file_name,
         view_mode=job.view_mode,
@@ -799,9 +1007,9 @@ def _to_status_response(job_id: str, job: JobState) -> JobStatusResponse:
 
 
 app = FastAPI(
-    title="IDIL PAPYRUS FACTURE DEMAT API",
+    title="IDIL PAPYRUS MAINFRAME API",
     version="1.0.0",
-    description="API web pour extraction Mainframe dynamique vers Excel et PDF.",
+    description="API web multi-programmes pour extraction Mainframe dynamique vers Excel et PDF.",
 )
 
 app.add_middleware(
@@ -815,16 +1023,42 @@ app.add_middleware(
 
 @app.get("/api/health")
 def health() -> dict[str, str]:
+    default_program = _get_default_program()
     return {
         "status": "ok",
-        "source_program": str(SOURCE_PATH),
+        "default_program_id": default_program.program_id,
+        "source_program": default_program.source_program,
     }
 
 
+@app.get("/api/programs", response_model=ProgramsResponse)
+def programs() -> ProgramsResponse:
+    program_items = sorted(_get_programs().values(), key=lambda item: item.program_id)
+    default_program = _get_default_program()
+    return ProgramsResponse(
+        default_program_id=default_program.program_id,
+        programs=[
+            ProgramSummaryResponse(
+                program_id=item.program_id,
+                display_name=item.display_name,
+                source_program=item.source_program,
+                analyzer_engine=item.analyzer_engine,
+                source_path=str(item.source_path),
+                invoice_only_default=item.invoice_only_default,
+            )
+            for item in program_items
+        ],
+    )
+
+
 @app.get("/api/catalog", response_model=CatalogResponse)
-def catalog(advanced: bool = False) -> CatalogResponse:
-    profiles_map = _get_flow_profiles()
-    filtered_profiles = [profile for profile in profiles_map.values() if advanced or profile.view_mode == "invoice"]
+def catalog(program_id: str | None = None, advanced: bool | None = None) -> CatalogResponse:
+    program = _resolve_program(program_id)
+    profiles_map = _get_flow_profiles(program.program_id)
+    advanced_mode = bool(advanced) if advanced is not None else (not program.invoice_only_default)
+    filtered_profiles = [
+        profile for profile in profiles_map.values() if advanced_mode or profile.view_mode == "invoice"
+    ]
     if not filtered_profiles:
         filtered_profiles = list(profiles_map.values())
     profiles = [
@@ -842,19 +1076,22 @@ def catalog(advanced: bool = False) -> CatalogResponse:
         for profile in sorted(filtered_profiles, key=lambda item: (item.flow_type, item.file_name))
     ]
     filtered_map = {(profile.flow_type, profile.file_name): profile for profile in filtered_profiles}
-    default_profile = filtered_map.get(("output", "FICDEMA"))
+    default_profile = filtered_map.get((program.default_flow_type, program.default_file_name))
     if default_profile is None and profiles:
         first = profiles[0]
         default_flow_type = first.flow_type
         default_file_name = first.file_name
     else:
-        default_flow_type = default_profile.flow_type if default_profile else "output"
-        default_file_name = default_profile.file_name if default_profile else "FICDEMA"
+        default_flow_type = default_profile.flow_type if default_profile else program.default_flow_type
+        default_file_name = default_profile.file_name if default_profile else program.default_file_name
     return CatalogResponse(
-        source_program="IDP470RA",
+        program_id=program.program_id,
+        program_display_name=program.display_name,
+        source_program=program.source_program,
         default_flow_type=default_flow_type,
         default_file_name=default_file_name,
-        advanced_mode=advanced,
+        invoice_only_default=program.invoice_only_default,
+        advanced_mode=advanced_mode,
         profiles=profiles,
     )
 
@@ -864,11 +1101,13 @@ async def create_job(
     background_tasks: BackgroundTasks,
     data_file: UploadFile | None = File(default=None),
     facdema_file: UploadFile | None = File(default=None),
+    program_id: str | None = Form(default=None),
     flow_type: str = Form(default="output"),
     file_name: str = Form(default="FICDEMA"),
     advanced_mode: bool = Form(default=False),
 ) -> JobCreateResponse:
-    profile = _resolve_profile(flow_type=flow_type, file_name=file_name)
+    program = _resolve_program(program_id)
+    profile = _resolve_profile(program_id=program.program_id, flow_type=flow_type, file_name=file_name)
     if not advanced_mode and profile.view_mode != "invoice":
         raise HTTPException(
             status_code=400,
@@ -881,7 +1120,7 @@ async def create_job(
         raise HTTPException(
             status_code=400,
             detail=(
-                f"Le fichier {profile.file_name} est detecte dans IDP470RA mais aucun mapping "
+                f"Le fichier {profile.file_name} est detecte dans {program.source_program} mais aucun mapping "
                 "structurel exploitable n'a ete trouve."
             ),
         )
@@ -899,17 +1138,17 @@ async def create_job(
         raise HTTPException(status_code=400, detail=f"Le fichier {profile.file_name} est vide.")
 
     try:
-        _get_contract(profile)
+        _get_contract(program, profile)
     except Exception as error:  # noqa: BLE001
         raise HTTPException(
             status_code=400,
             detail=(
-                f"Mapping IDP470RA indisponible pour {profile.file_name}. "
+                f"Mapping {program.source_program} indisponible pour {profile.file_name}. "
                 f"Details: {error}"
             ),
         ) from error
 
-    _validate_uploaded_payload_for_profile(profile, payload)
+    _validate_uploaded_payload_for_profile(program, profile, payload)
 
     job_id = uuid.uuid4().hex[:12]
     safe_name = Path(uploaded_file.filename).name
@@ -922,15 +1161,19 @@ async def create_job(
         _JOBS[job_id] = JobState(
             job_id=job_id,
             input_filename=safe_name,
+            program_id=program.program_id,
+            program_display_name=program.display_name,
             flow_type=profile.flow_type,
             file_name=profile.file_name,
             view_mode=profile.view_mode,
             role_label=profile.role_label,
         )
 
-    background_tasks.add_task(_process_job, job_id, input_path, profile)
+    background_tasks.add_task(_process_job, job_id, input_path, program, profile)
     return JobCreateResponse(
         job_id=job_id,
+        program_id=program.program_id,
+        program_display_name=program.display_name,
         status="queued",
         message="Traitement lance",
         flow_type=profile.flow_type,

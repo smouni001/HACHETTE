@@ -1,0 +1,21 @@
+{
+  "program_id": "my_program",
+  "display_name": "Mon Programme Mainframe",
+  "description": "Description metier courte.",
+  "source": {
+    "path": "sources/MYPROG.pli",
+    "program_name": "MYPROG",
+    "encoding": "latin-1"
+  },
+  "analyzer": {
+    "engine": "idp470_pli",
+    "spec_pdf_path": "docs/spec_metier.pdf"
+  },
+  "ui_defaults": {
+    "invoice_only": true,
+    "default_flow_type": "output",
+    "default_file_name": "FICDEMA"
+  },
+  "continue_on_error": false,
+  "reuse_contract": true
+}

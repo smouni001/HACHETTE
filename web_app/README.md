@@ -37,23 +37,27 @@ Puis ouvrir:
 
 ## 3) Variables optionnelles
 
-- `IDP470_WEB_SOURCE` chemin du programme source (defaut: `IDP470RA.pli`)
-- `IDP470_WEB_SPEC_PDF` chemin du PDF de regles (defaut: `2785 - DOCTECHN - Dilifac - Format IDIL.pdf`)
+- `IDP470_WEB_PROGRAMS_DIR` dossier des configurations programmes JSON (defaut: `web_app/programs`)
+- `IDP470_WEB_SOURCE` fallback programme source si aucun JSON n'est charge (defaut: `IDP470RA.pli`)
+- `IDP470_WEB_SOURCE_PROGRAM` fallback nom programme (defaut: `IDP470RA`)
+- `IDP470_WEB_SPEC_PDF` fallback PDF de regles (defaut: `2785 - DOCTECHN - Dilifac - Format IDIL.pdf`)
 - `IDP470_WEB_LOGO` chemin du logo (defaut: `assets/logo_hachette_livre.png`)
 - `IDP470_WEB_JOBS_DIR` dossier de travail des jobs (defaut: `web_app/jobs`)
-- `IDP470_WEB_INPUT_ENCODING` encodage fichier source (defaut: `latin-1`)
-- `IDP470_WEB_CONTINUE_ON_ERROR` `true/false` (defaut: `false`)
-- `IDP470_WEB_REUSE_CONTRACT` `true/false` reutilise le contrat en memoire entre jobs (defaut: `true`)
+- `IDP470_WEB_INPUT_ENCODING` fallback encodage (defaut: `latin-1`)
+- `IDP470_WEB_CONTINUE_ON_ERROR` fallback `true/false` (defaut: `false`)
+- `IDP470_WEB_REUSE_CONTRACT` fallback `true/false` reutilise le contrat en memoire entre jobs (defaut: `true`)
 
 ## 4) API principale
 
 - `GET /api/health`
-- `GET /api/catalog` (liste dynamique des flux/fichiers detectes dans `IDP470RA`)
+- `GET /api/programs` (liste des programmes disponibles)
+- `GET /api/catalog?program_id=<id>&advanced=<true|false>`
+  - selection hierarchique: Programme -> Flux -> Fichier
   - par defaut: seulement les fichiers Factures
   - mode avance: `GET /api/catalog?advanced=true` pour afficher tous les fichiers
-- `POST /api/jobs` (form-data: `flow_type`, `file_name`, `data_file`, `advanced_mode`)
+- `POST /api/jobs` (form-data: `program_id`, `flow_type`, `file_name`, `data_file`, `advanced_mode`)
   - en mode standard (`advanced_mode=false`), seuls les fichiers Factures sont acceptes
-  - le backend bloque le chargement si la signature structurelle du fichier ne correspond pas au fichier logique choisi
+  - le backend bloque le chargement si la signature structurelle du fichier ne correspond pas au fichier logique choisi (validation stricte)
 - `GET /api/jobs/{job_id}`
 - `GET /api/jobs/{job_id}/download/excel`
 - `GET /api/jobs/{job_id}/download/pdf-factures`
@@ -67,6 +71,59 @@ Le catalogue retourne pour chaque fichier:
 - mode d'affichage (`invoice` ou `generic`)
 - etat du mapping (`supports_processing`)
 - structures IDP470RA associees (`raw_structures`)
+
+## 4.2) Architecture technique (multi-programmes)
+
+- Frontend:
+  - selection `Programme source` puis `Type de flux` puis `Fichier logique`
+  - mode standard (factures) + switch `Mode avance` (vue globale)
+  - rendu conditionnel facture/non-facture
+- Backend:
+  - registre de programmes JSON (`web_app/programs/*.json`)
+  - moteur d'analyse abstrait via champ `analyzer.engine` (actuel: `idp470_pli`)
+  - extraction structurelle dynamique depuis le programme choisi
+  - validation anti-erreur avant parsing (bloque les donnees non conformes)
+  - parsing/export generique pilote par contrat
+
+## 4.3) Exemple de configuration programme (JSON)
+
+Un exemple est fourni dans:
+
+- `web_app/programs/program_config.example.json`
+
+Exemple minimal:
+
+```json
+{
+  "program_id": "my_program",
+  "display_name": "Mon Programme Mainframe",
+  "source": {
+    "path": "sources/MYPROG.pli",
+    "program_name": "MYPROG",
+    "encoding": "latin-1"
+  },
+  "analyzer": {
+    "engine": "idp470_pli",
+    "spec_pdf_path": "docs/spec_metier.pdf"
+  },
+  "ui_defaults": {
+    "invoice_only": true,
+    "default_flow_type": "output",
+    "default_file_name": "FICDEMA"
+  }
+}
+```
+
+## 4.4) Logique de validation fichier charge
+
+Avant tout parsing, le backend compare le contenu charge avec la structure attendue:
+
+1. verification de la signature des enregistrements (selectors)
+2. verification de la longueur mediane des lignes vs contrat
+3. verification des tolerances selon type de flux (facture/generic)
+4. suggestion d'un fichier logique probable en cas de mismatch
+
+Si la correspondance echoue, le job est bloque avec erreur explicite.
 
 ## 4.1) Logique de switch conditionnel
 
