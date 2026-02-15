@@ -16,7 +16,6 @@ const progressWrap = document.getElementById("progressWrap");
 
 const invoiceCount = document.getElementById("invoiceCount");
 const lineCount = document.getElementById("lineCount");
-const issuesCount = document.getElementById("issuesCount");
 
 const downloadExcel = document.getElementById("downloadExcel");
 const downloadPdfFactures = document.getElementById("downloadPdfFactures");
@@ -141,7 +140,6 @@ function applyStatus(payload) {
   const metrics = payload.metrics || {};
   setMetricValue(invoiceCount, metrics.invoice_count || 0);
   setMetricValue(lineCount, metrics.line_count || 0);
-  setMetricValue(issuesCount, metrics.issues_count || 0);
   setWarnings(payload.warnings || []);
 
   const downloads = payload.downloads || {};
@@ -236,7 +234,6 @@ form.addEventListener("submit", async (event) => {
     }
     setMetricValue(invoiceCount, 0);
     setMetricValue(lineCount, 0);
-    setMetricValue(issuesCount, 0);
     setDownload(downloadExcel, null);
     setDownload(downloadPdfFactures, null);
     setDownload(downloadPdfSynthese, null);
