@@ -2,6 +2,7 @@ const form = document.getElementById("jobForm");
 const flowTypeSelect = document.getElementById("flowType");
 const fileNameSelect = document.getElementById("fileName");
 const advancedModeToggle = document.getElementById("advancedMode");
+const catalogStatus = document.getElementById("catalogStatus");
 const dataFileLabel = document.getElementById("dataFileLabel");
 const profileContext = document.getElementById("profileContext");
 const fileInput = document.getElementById("dataFile");
@@ -33,6 +34,7 @@ const downloadPdfSynthese = document.getElementById("downloadPdfSynthese");
 let activeJobId = null;
 let pollTimer = null;
 let catalogProfiles = [];
+const CATALOG_CACHE_TTL_MS = 5 * 60 * 1000;
 
 const STATUS_CONFIG = {
   queued: { label: "En attente", badgeClass: "is-queued" },
@@ -109,6 +111,54 @@ function setBusy(isBusy) {
   fileNameSelect.disabled = isBusy;
   advancedModeToggle.disabled = isBusy;
   launchBtn.textContent = isBusy ? "Extraction en cours..." : "Extraction Excel/PDF";
+}
+
+function cacheKeyForCatalog(advancedMode) {
+  return advancedMode ? "idil.catalog.advanced" : "idil.catalog.standard";
+}
+
+function readCatalogCache(advancedMode) {
+  try {
+    const raw = localStorage.getItem(cacheKeyForCatalog(advancedMode));
+    if (!raw) {
+      return null;
+    }
+    const parsed = JSON.parse(raw);
+    const ts = Number(parsed?.timestamp || 0);
+    if (!Array.isArray(parsed?.profiles) || !ts) {
+      return null;
+    }
+    if (Date.now() - ts > CATALOG_CACHE_TTL_MS) {
+      return null;
+    }
+    return parsed;
+  } catch (error) {
+    return null;
+  }
+}
+
+function writeCatalogCache(advancedMode, payload) {
+  try {
+    localStorage.setItem(
+      cacheKeyForCatalog(advancedMode),
+      JSON.stringify({
+        timestamp: Date.now(),
+        profiles: payload?.profiles || [],
+        default_flow_type: payload?.default_flow_type || "output",
+        default_file_name: payload?.default_file_name || "FICDEMA",
+      }),
+    );
+  } catch (error) {
+    // Ignore storage errors
+  }
+}
+
+function setCatalogStatus(message, isLoading = false) {
+  if (!catalogStatus) {
+    return;
+  }
+  catalogStatus.textContent = message || "";
+  catalogStatus.classList.toggle("is-loading", Boolean(isLoading));
 }
 
 function setMetricValue(element, value) {
@@ -407,12 +457,14 @@ function loadFlowOptions(defaultFlowType = "output", defaultFileName = "FICDEMA"
 
 async function loadCatalog(preferredSelection = null) {
   const advancedMode = isAdvancedModeEnabled();
+  setCatalogStatus("Chargement du catalogue...", true);
   try {
     const response = await fetch(`/api/catalog?advanced=${advancedMode ? "true" : "false"}`);
     if (!response.ok) {
       throw new Error("Catalogue indisponible");
     }
     const payload = await response.json();
+    writeCatalogCache(advancedMode, payload);
     catalogProfiles = Array.isArray(payload.profiles) ? payload.profiles : [];
     if (catalogProfiles.length === 0) {
       fallbackCatalog();
@@ -429,6 +481,7 @@ async function loadCatalog(preferredSelection = null) {
       preferredFlow,
       preferredFile,
     );
+    setCatalogStatus(`Catalogue pret (${catalogProfiles.length} fichiers).`);
   } catch (error) {
     fallbackCatalog();
     if (preferredSelection) {
@@ -437,6 +490,7 @@ async function loadCatalog(preferredSelection = null) {
       loadFlowOptions("output", "FICDEMA");
     }
     setError("Catalogue non charge. Mode de secours active.");
+    setCatalogStatus(`Mode secours actif (${catalogProfiles.length} fichiers).`);
   }
 }
 
@@ -518,7 +572,24 @@ form.addEventListener("submit", async (event) => {
   }
 });
 
-loadCatalog().catch(() => {
+(function initCatalog() {
+  const advancedMode = isAdvancedModeEnabled();
+  const cached = readCatalogCache(advancedMode);
+  if (cached && Array.isArray(cached.profiles) && cached.profiles.length > 0) {
+    catalogProfiles = cached.profiles;
+    loadFlowOptions(
+      String(cached.default_flow_type || "output").toLowerCase(),
+      String(cached.default_file_name || "FICDEMA").toUpperCase(),
+    );
+    setCatalogStatus(`Catalogue charge depuis cache (${catalogProfiles.length} fichiers).`);
+    loadCatalog().catch(() => {});
+    return;
+  }
+
   fallbackCatalog();
   loadFlowOptions("output", "FICDEMA");
-});
+  setCatalogStatus(`Chargement initial (${catalogProfiles.length} fichiers).`, true);
+  loadCatalog().catch(() => {
+    setCatalogStatus(`Mode secours actif (${catalogProfiles.length} fichiers).`);
+  });
+})();

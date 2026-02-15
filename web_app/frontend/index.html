@@ -10,7 +10,7 @@
       href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="/app.css?v=20260215-6" />
+    <link rel="stylesheet" href="/app.css?v=20260215-7" />
   </head>
   <body>
     <main class="page">
@@ -36,10 +36,15 @@
               <select id="fileName" name="fileName" required></select>
             </div>
           </div>
-          <label class="advanced-toggle">
+          <label class="advanced-switch" for="advancedMode">
             <input id="advancedMode" name="advancedMode" type="checkbox" />
-            <span>Mode avance: afficher tous les fichiers (Input/Output)</span>
+            <span class="switch-track" aria-hidden="true"><span class="switch-thumb"></span></span>
+            <span class="switch-copy">
+              <strong>Mode avance</strong>
+              <small>Afficher tous les fichiers (Input/Output)</small>
+            </span>
           </label>
+          <p id="catalogStatus" class="hint catalog-status">Chargement du catalogue...</p>
           <label for="dataFile" id="dataFileLabel" class="file-label">Charger le fichier (obligatoire)</label>
           <input id="dataFile" name="dataFile" type="file" accept=".txt,.dat" required />
           <button id="launchBtn" type="submit">Extraction Excel/PDF</button>
@@ -107,6 +112,6 @@
         </div>
       </section>
     </main>
-    <script src="/app.js?v=20260215-6"></script>
+    <script src="/app.js?v=20260215-7"></script>
   </body>
 </html>

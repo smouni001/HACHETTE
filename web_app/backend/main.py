@@ -444,31 +444,6 @@ def _infer_role_label(*, file_name: str, description: str, structures: tuple[str
     return "fichier metier"
 
 
-def _contract_can_be_built(
-    *,
-    strict_length_validation: bool,
-    structure_prefixes: tuple[str, ...],
-    structure_names: tuple[str, ...],
-    preserve_structure_names: bool,
-    apply_idil_rules: bool,
-) -> bool:
-    try:
-        extract_contract_deterministic(
-            source_path=SOURCE_PATH,
-            source_program="IDP470RA",
-            strict=strict_length_validation,
-            spec_pdf_path=_safe_spec_pdf_path(),
-            structure_prefixes=structure_prefixes or None,
-            structure_names=set(structure_names) if structure_names else None,
-            preserve_structure_names=preserve_structure_names,
-            apply_idil_rules=apply_idil_rules,
-        )
-        return True
-    except Exception as error:  # noqa: BLE001
-        LOGGER.debug("Profile mapping non exploitable (%s): %s", ",".join(structure_names) or ",".join(structure_prefixes), error)
-        return False
-
-
 def _discover_flow_profiles() -> dict[tuple[str, str], FlowProfile]:
     text = SOURCE_PATH.read_text(encoding="latin-1")
     declarations: dict[str, tuple[str, str]] = {}
@@ -542,15 +517,9 @@ def _discover_flow_profiles() -> dict[tuple[str, str], FlowProfile]:
             role_label = "facturation"
             view_mode = "invoice"
 
+        # Fast startup: do not build deterministic contracts for every profile here.
+        # Real contract build/validation is done lazily during job creation.
         supports_processing = bool(structure_prefixes or structure_names)
-        if supports_processing:
-            supports_processing = _contract_can_be_built(
-                strict_length_validation=strict_length_validation,
-                structure_prefixes=structure_prefixes,
-                structure_names=structure_names,
-                preserve_structure_names=preserve_structure_names,
-                apply_idil_rules=apply_idil_rules,
-            )
 
         profiles[(flow_type, file_name)] = FlowProfile(
             flow_type=flow_type,
@@ -928,6 +897,17 @@ async def create_job(
     payload = await uploaded_file.read()
     if not payload:
         raise HTTPException(status_code=400, detail=f"Le fichier {profile.file_name} est vide.")
+
+    try:
+        _get_contract(profile)
+    except Exception as error:  # noqa: BLE001
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Mapping IDP470RA indisponible pour {profile.file_name}. "
+                f"Details: {error}"
+            ),
+        ) from error
 
     _validate_uploaded_payload_for_profile(profile, payload)
 
