@@ -10,7 +10,7 @@
       href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="/app.css?v=20260215-7" />
+    <link rel="stylesheet" href="/app.css?v=20260215-8" />
   </head>
   <body>
     <main class="page">
@@ -22,7 +22,7 @@
         </div>
       </header>
 
-      <section class="panel">
+      <section class="panel panel-form">
         <h2>Lancer un traitement</h2>
         <p class="hint">Par defaut, seuls les fichiers Factures sont proposes. Activez le mode avance pour afficher tous les flux detectes dans IDP470RA.</p>
         <form id="jobForm" class="job-form">
@@ -43,10 +43,13 @@
               <strong>Mode avance</strong>
               <small>Afficher tous les fichiers (Input/Output)</small>
             </span>
+            <span id="advancedModeState" class="switch-mode-badge">Standard</span>
           </label>
           <p id="catalogStatus" class="hint catalog-status">Chargement du catalogue...</p>
-          <label for="dataFile" id="dataFileLabel" class="file-label">Charger le fichier (obligatoire)</label>
-          <input id="dataFile" name="dataFile" type="file" accept=".txt,.dat" required />
+          <div class="upload-zone">
+            <label for="dataFile" id="dataFileLabel" class="file-label">Charger le fichier (obligatoire)</label>
+            <input id="dataFile" name="dataFile" type="file" accept=".txt,.dat" required />
+          </div>
           <button id="launchBtn" type="submit">Extraction Excel/PDF</button>
         </form>
         <p id="profileContext" class="hint profile-context"></p>
@@ -112,6 +115,6 @@
         </div>
       </section>
     </main>
-    <script src="/app.js?v=20260215-7"></script>
+    <script src="/app.js?v=20260215-8"></script>
   </body>
 </html>

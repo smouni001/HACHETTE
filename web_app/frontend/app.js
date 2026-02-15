@@ -2,6 +2,7 @@ const form = document.getElementById("jobForm");
 const flowTypeSelect = document.getElementById("flowType");
 const fileNameSelect = document.getElementById("fileName");
 const advancedModeToggle = document.getElementById("advancedMode");
+const advancedModeState = document.getElementById("advancedModeState");
 const catalogStatus = document.getElementById("catalogStatus");
 const dataFileLabel = document.getElementById("dataFileLabel");
 const profileContext = document.getElementById("profileContext");
@@ -111,6 +112,7 @@ function setBusy(isBusy) {
   fileNameSelect.disabled = isBusy;
   advancedModeToggle.disabled = isBusy;
   launchBtn.textContent = isBusy ? "Extraction en cours..." : "Extraction Excel/PDF";
+  setAdvancedModeIndicator();
 }
 
 function cacheKeyForCatalog(advancedMode) {
@@ -232,11 +234,23 @@ function firstStructures(profile) {
 
 function renderProfileContext(profile) {
   if (!profile) {
-    profileContext.textContent = "";
+    profileContext.innerHTML = "";
     return;
   }
   const statusText = profile.supports_processing ? "Mapping actif" : "Mapping non detecte";
-  profileContext.textContent = `Role: ${profile.role_label || "metier"} | Mode: ${formatModeLabel(profile.view_mode)} | ${statusText} | Structures: ${firstStructures(profile)}`;
+  const chips = [
+    `Role: ${profile.role_label || "metier"}`,
+    `Mode: ${formatModeLabel(profile.view_mode)}`,
+    statusText,
+    `Structures: ${firstStructures(profile)}`,
+  ];
+  profileContext.innerHTML = "";
+  chips.forEach((entry) => {
+    const chip = document.createElement("span");
+    chip.className = "context-chip";
+    chip.textContent = entry;
+    profileContext.appendChild(chip);
+  });
 }
 
 function setKpiCards(kpis) {
@@ -366,6 +380,15 @@ function selectedProfile() {
 
 function isAdvancedModeEnabled() {
   return Boolean(advancedModeToggle?.checked);
+}
+
+function setAdvancedModeIndicator() {
+  if (!advancedModeState) {
+    return;
+  }
+  const isAdvanced = isAdvancedModeEnabled();
+  advancedModeState.textContent = isAdvanced ? "Avance" : "Standard";
+  advancedModeState.classList.toggle("is-on", isAdvanced);
 }
 
 function updateUploadLabel() {
@@ -503,6 +526,7 @@ fileNameSelect.addEventListener("change", () => {
 });
 
 advancedModeToggle.addEventListener("change", () => {
+  setAdvancedModeIndicator();
   const currentSelection = {
     flow_type: String(flowTypeSelect.value || "output").toLowerCase(),
     file_name: String(fileNameSelect.value || "FICDEMA").toUpperCase(),
@@ -573,6 +597,7 @@ form.addEventListener("submit", async (event) => {
 });
 
 (function initCatalog() {
+  setAdvancedModeIndicator();
   const advancedMode = isAdvancedModeEnabled();
   const cached = readCatalogCache(advancedMode);
   if (cached && Array.isArray(cached.profiles) && cached.profiles.length > 0) {
