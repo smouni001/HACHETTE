@@ -22,4 +22,7 @@ services:
         value: latin-1
       - key: IDP470_WEB_CONTINUE_ON_ERROR
         value: "false"
-
+      - key: IDP470_WEB_FAST_EXCEL
+        value: "true"
+      - key: IDP470_WEB_REUSE_CONTRACT
+        value: "true"

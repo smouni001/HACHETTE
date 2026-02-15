@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import threading
 import uuid
@@ -14,11 +15,13 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
+import pandas as pd
 
 from idp470_pipeline.deterministic_extractor import extract_contract_deterministic
 from idp470_pipeline.exporters import export_accounting_summary_pdf, export_first_invoice_pdf, export_to_excel
 from idp470_pipeline.parsing_engine import FixedWidthParser, save_jsonl
 
+LOGGER = logging.getLogger(__name__)
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 SOURCE_PATH = Path(os.getenv("IDP470_WEB_SOURCE", PROJECT_ROOT / "IDP470RA.pli")).expanduser()
 SPEC_PDF_PATH = Path(
@@ -28,6 +31,8 @@ LOGO_PATH = Path(os.getenv("IDP470_WEB_LOGO", PROJECT_ROOT / "assets" / "logo_ha
 JOBS_ROOT = Path(os.getenv("IDP470_WEB_JOBS_DIR", PROJECT_ROOT / "web_app" / "jobs")).expanduser()
 INPUT_ENCODING = os.getenv("IDP470_WEB_INPUT_ENCODING", "latin-1")
 CONTINUE_ON_ERROR = os.getenv("IDP470_WEB_CONTINUE_ON_ERROR", "false").strip().lower() == "true"
+FAST_EXCEL = os.getenv("IDP470_WEB_FAST_EXCEL", "true").strip().lower() == "true"
+REUSE_CONTRACT = os.getenv("IDP470_WEB_REUSE_CONTRACT", "true").strip().lower() == "true"
 
 JOBS_ROOT.mkdir(parents=True, exist_ok=True)
 
@@ -61,6 +66,8 @@ class JobState:
 
 _JOBS: dict[str, JobState] = {}
 _JOBS_LOCK = threading.Lock()
+_CONTRACT_CACHE = None
+_CONTRACT_LOCK = threading.Lock()
 
 
 def _job_dir(job_id: str) -> Path:
@@ -158,6 +165,35 @@ def _safe_media_type(path: Path) -> str:
     return "application/octet-stream"
 
 
+def _build_contract():
+    return extract_contract_deterministic(
+        source_path=SOURCE_PATH,
+        source_program="IDP470RA",
+        strict=True,
+        spec_pdf_path=_safe_spec_pdf_path(),
+    )
+
+
+def _get_contract():
+    global _CONTRACT_CACHE
+    if not REUSE_CONTRACT:
+        return _build_contract()
+
+    with _CONTRACT_LOCK:
+        if _CONTRACT_CACHE is None:
+            _CONTRACT_CACHE = _build_contract()
+        return _CONTRACT_CACHE
+
+
+def _export_excel_fast(records: list[dict[str, Any]], output_path: Path) -> None:
+    if not records:
+        raise ValueError("Aucun enregistrement a exporter vers Excel.")
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    df = pd.DataFrame(records)
+    with pd.ExcelWriter(output_path, engine="openpyxl") as writer:
+        df.to_excel(writer, index=False, sheet_name="TOUS")
+
+
 def _process_job(job_id: str, input_path: Path) -> None:
     workdir = _job_dir(job_id)
     output_dir = workdir / "outputs"
@@ -169,12 +205,7 @@ def _process_job(job_id: str, input_path: Path) -> None:
             raise FileNotFoundError(f"Source programme introuvable: {SOURCE_PATH}")
 
         _set_job(job_id, status="running", progress=10, message="Extraction du contrat en cours")
-        contract = extract_contract_deterministic(
-            source_path=SOURCE_PATH,
-            source_program="IDP470RA",
-            strict=True,
-            spec_pdf_path=_safe_spec_pdf_path(),
-        )
+        contract = _get_contract()
 
         contract_path = output_dir / "idp470ra_contract.json"
         contract_path.write_text(
@@ -193,9 +224,16 @@ def _process_job(job_id: str, input_path: Path) -> None:
         parsed_path = output_dir / "parsed_records.jsonl"
         save_jsonl(records=records, output_path=parsed_path)
 
-        _set_job(job_id, progress=55, message="Generation Excel en cours")
+        _set_job(
+            job_id,
+            progress=55,
+            message="Generation Excel rapide en cours" if FAST_EXCEL else "Generation Excel en cours",
+        )
         excel_path = output_dir / "parsed_records.xlsx"
-        export_to_excel(records=records, output_path=excel_path, contract=contract)
+        if FAST_EXCEL:
+            _export_excel_fast(records=records, output_path=excel_path)
+        else:
+            export_to_excel(records=records, output_path=excel_path, contract=contract)
 
         _set_job(job_id, progress=75, message="Generation PDF factures en cours")
         pdf_factures_path = output_dir / "facture_exemple.pdf"
@@ -247,6 +285,7 @@ def _process_job(job_id: str, input_path: Path) -> None:
             error=str(error),
             warnings=warnings,
         )
+        LOGGER.exception("Job %s failed", job_id)
 
 
 class JobCreateResponse(BaseModel):

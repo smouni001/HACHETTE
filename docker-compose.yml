@@ -13,8 +13,9 @@ services:
       IDP470_WEB_JOBS_DIR: /app/web_app/jobs
       IDP470_WEB_INPUT_ENCODING: latin-1
       IDP470_WEB_CONTINUE_ON_ERROR: "false"
+      IDP470_WEB_FAST_EXCEL: "true"
+      IDP470_WEB_REUSE_CONTRACT: "true"
       UVICORN_WORKERS: "2"
     volumes:
       - ./web_app/jobs:/app/web_app/jobs
     restart: unless-stopped
-

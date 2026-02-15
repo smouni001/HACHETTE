@@ -43,6 +43,8 @@ Puis ouvrir:
 - `IDP470_WEB_JOBS_DIR` dossier de travail des jobs (defaut: `web_app/jobs`)
 - `IDP470_WEB_INPUT_ENCODING` encodage FACDEMA (defaut: `latin-1`)
 - `IDP470_WEB_CONTINUE_ON_ERROR` `true/false` (defaut: `false`)
+- `IDP470_WEB_FAST_EXCEL` `true/false` export Excel rapide (defaut: `true`)
+- `IDP470_WEB_REUSE_CONTRACT` `true/false` reutilise le contrat en memoire entre jobs (defaut: `true`)
 
 ## 4) API principale
 
