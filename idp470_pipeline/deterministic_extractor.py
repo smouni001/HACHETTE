@@ -15,6 +15,11 @@ def extract_contract_deterministic(
     source_program: str = "IDP470RA",
     strict: bool = True,
     spec_pdf_path: Path | None = None,
+    *,
+    structure_prefixes: tuple[str, ...] | None = None,
+    structure_names: set[str] | None = None,
+    preserve_structure_names: bool = False,
+    apply_idil_rules: bool = True,
 ) -> ContractSpec:
     if source_path.suffix.lower() == ".pdf":
         raise ValueError(
@@ -26,5 +31,10 @@ def extract_contract_deterministic(
         source_path=source_path,
         source_program=source_program,
         strict=strict,
+        structure_prefixes=structure_prefixes,
+        structure_names=structure_names,
+        preserve_structure_names=preserve_structure_names,
     )
-    return attach_idil_structure_rules(contract=contract, spec_pdf_path=spec_pdf_path)
+    if apply_idil_rules:
+        return attach_idil_structure_rules(contract=contract, spec_pdf_path=spec_pdf_path)
+    return contract

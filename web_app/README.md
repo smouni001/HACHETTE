@@ -41,7 +41,7 @@ Puis ouvrir:
 - `IDP470_WEB_SPEC_PDF` chemin du PDF de regles (defaut: `2785 - DOCTECHN - Dilifac - Format IDIL.pdf`)
 - `IDP470_WEB_LOGO` chemin du logo (defaut: `assets/logo_hachette_livre.png`)
 - `IDP470_WEB_JOBS_DIR` dossier de travail des jobs (defaut: `web_app/jobs`)
-- `IDP470_WEB_INPUT_ENCODING` encodage FACDEMA (defaut: `latin-1`)
+- `IDP470_WEB_INPUT_ENCODING` encodage fichier source (defaut: `latin-1`)
 - `IDP470_WEB_CONTINUE_ON_ERROR` `true/false` (defaut: `false`)
 - `IDP470_WEB_FAST_EXCEL` `true/false` export Excel rapide (defaut: `true`)
 - `IDP470_WEB_REUSE_CONTRACT` `true/false` reutilise le contrat en memoire entre jobs (defaut: `true`)
@@ -49,11 +49,18 @@ Puis ouvrir:
 ## 4) API principale
 
 - `GET /api/health`
-- `POST /api/jobs` (form-data: `facdema_file`)
+- `GET /api/catalog` (liste des flux/fichiers disponibles)
+- `POST /api/jobs` (form-data: `flow_type`, `file_name`, `data_file`)
 - `GET /api/jobs/{job_id}`
 - `GET /api/jobs/{job_id}/download/excel`
 - `GET /api/jobs/{job_id}/download/pdf-factures`
 - `GET /api/jobs/{job_id}/download/pdf-synthese`
+
+Profils disponibles par defaut:
+
+- `output / FICDEMA` (layout `DEMAT_*`)
+- `output / FICSTOD` (layout `STO_D_*`)
+- `input / FFAC3A` (layout `WTFAC`)
 
 ## 5) Hebergement AWS (ECS Fargate)
 
@@ -83,7 +90,7 @@ Render utilisera automatiquement:
 
 - Ouvrir l'URL Render
 - Verifier `https://<votre-app>.onrender.com/api/health`
-- Charger un FACDEMA depuis l'interface
+- Selectionner un flux puis charger le fichier correspondant depuis l'interface
 - Verifier les telechargements Excel/PDF
 
 Note:

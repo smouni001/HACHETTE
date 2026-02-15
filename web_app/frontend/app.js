@@ -1,5 +1,8 @@
 const form = document.getElementById("jobForm");
-const fileInput = document.getElementById("facdemaFile");
+const flowTypeSelect = document.getElementById("flowType");
+const fileNameSelect = document.getElementById("fileName");
+const dataFileLabel = document.getElementById("dataFileLabel");
+const fileInput = document.getElementById("dataFile");
 const launchBtn = document.getElementById("launchBtn");
 const errorBox = document.getElementById("errorBox");
 const warningBox = document.getElementById("warningBox");
@@ -24,12 +27,37 @@ const downloadPdfSynthese = document.getElementById("downloadPdfSynthese");
 
 let activeJobId = null;
 let pollTimer = null;
+let catalogProfiles = [];
+
 const STATUS_CONFIG = {
   queued: { label: "En attente", badgeClass: "is-queued" },
   running: { label: "En cours", badgeClass: "is-running" },
   completed: { label: "Termine", badgeClass: "is-completed" },
   failed: { label: "Echec", badgeClass: "is-failed" },
 };
+
+function fallbackCatalog() {
+  catalogProfiles = [
+    {
+      flow_type: "output",
+      file_name: "FICDEMA",
+      display_name: "FICDEMA",
+      description: "Flux output facture dematerialisee.",
+    },
+    {
+      flow_type: "output",
+      file_name: "FICSTOD",
+      display_name: "FICSTOD",
+      description: "Flux output stock facture dematerialisee.",
+    },
+    {
+      flow_type: "input",
+      file_name: "FFAC3A",
+      display_name: "FFAC3A",
+      description: "Flux input source a facturer.",
+    },
+  ];
+}
 
 function setError(message) {
   if (!message) {
@@ -54,6 +82,8 @@ function setWarnings(warnings) {
 function setBusy(isBusy) {
   launchBtn.disabled = isBusy;
   fileInput.disabled = isBusy;
+  flowTypeSelect.disabled = isBusy;
+  fileNameSelect.disabled = isBusy;
   launchBtn.textContent = isBusy ? "Extraction en cours..." : "Extraction Excel/PDF";
 }
 
@@ -196,19 +226,135 @@ function startPolling(jobId) {
   }, 1200);
 }
 
+function selectedProfile() {
+  const flowType = String(flowTypeSelect.value || "").toLowerCase();
+  const fileName = String(fileNameSelect.value || "").toUpperCase();
+  return catalogProfiles.find(
+    (profile) =>
+      String(profile.flow_type || "").toLowerCase() === flowType &&
+      String(profile.file_name || "").toUpperCase() === fileName,
+  );
+}
+
+function updateUploadLabel() {
+  const profile = selectedProfile();
+  if (!profile) {
+    dataFileLabel.textContent = "Charger le fichier (obligatoire)";
+    return;
+  }
+  dataFileLabel.textContent = `Charger le fichier ${profile.file_name} (obligatoire)`;
+}
+
+function labelForFlowType(flowType) {
+  return String(flowType || "").toLowerCase() === "input" ? "Input" : "Output";
+}
+
+function rebuildFileOptions(targetFileName = null) {
+  const selectedFlow = String(flowTypeSelect.value || "").toLowerCase();
+  const availableProfiles = catalogProfiles.filter(
+    (profile) => String(profile.flow_type || "").toLowerCase() === selectedFlow,
+  );
+
+  fileNameSelect.innerHTML = "";
+  availableProfiles.forEach((profile) => {
+    const option = document.createElement("option");
+    option.value = profile.file_name;
+    option.textContent = profile.display_name || profile.file_name;
+    option.title = profile.description || "";
+    fileNameSelect.appendChild(option);
+  });
+
+  if (targetFileName) {
+    const normalizedTarget = String(targetFileName).toUpperCase();
+    const found = availableProfiles.some(
+      (profile) => String(profile.file_name || "").toUpperCase() === normalizedTarget,
+    );
+    if (found) {
+      fileNameSelect.value = normalizedTarget;
+    }
+  }
+  updateUploadLabel();
+}
+
+function loadFlowOptions(defaultFlowType = "output", defaultFileName = "FICDEMA") {
+  const flowTypeSet = new Set(
+    catalogProfiles.map((profile) => String(profile.flow_type || "").toLowerCase()).filter(Boolean),
+  );
+  const flowTypes = Array.from(flowTypeSet).sort();
+
+  flowTypeSelect.innerHTML = "";
+  flowTypes.forEach((flowType) => {
+    const option = document.createElement("option");
+    option.value = flowType;
+    option.textContent = labelForFlowType(flowType);
+    flowTypeSelect.appendChild(option);
+  });
+
+  if (flowTypes.length === 0) {
+    return;
+  }
+
+  if (flowTypes.includes(defaultFlowType)) {
+    flowTypeSelect.value = defaultFlowType;
+  } else {
+    flowTypeSelect.value = flowTypes[0];
+  }
+  rebuildFileOptions(defaultFileName);
+}
+
+async function loadCatalog() {
+  try {
+    const response = await fetch("/api/catalog");
+    if (!response.ok) {
+      throw new Error("Catalogue indisponible");
+    }
+    const payload = await response.json();
+    catalogProfiles = Array.isArray(payload.profiles) ? payload.profiles : [];
+    if (catalogProfiles.length === 0) {
+      fallbackCatalog();
+      loadFlowOptions("output", "FICDEMA");
+      return;
+    }
+    loadFlowOptions(
+      String(payload.default_flow_type || "output").toLowerCase(),
+      String(payload.default_file_name || "FICDEMA").toUpperCase(),
+    );
+  } catch (error) {
+    fallbackCatalog();
+    loadFlowOptions("output", "FICDEMA");
+    setError("Catalogue non charge. Mode de secours active.");
+  }
+}
+
+flowTypeSelect.addEventListener("change", () => {
+  rebuildFileOptions();
+});
+
+fileNameSelect.addEventListener("change", () => {
+  updateUploadLabel();
+});
+
 form.addEventListener("submit", async (event) => {
   event.preventDefault();
   setError("");
   setWarnings([]);
 
   const file = fileInput.files?.[0];
+  const profile = selectedProfile();
+
+  if (!profile) {
+    setError("Selection flux/fichier invalide.");
+    return;
+  }
   if (!file) {
-    setError("Chargez un fichier FACDEMA avant de lancer le traitement.");
+    setError(`Chargez le fichier ${profile.file_name} avant de lancer le traitement.`);
     return;
   }
 
   const formData = new FormData();
-  formData.append("facdema_file", file, file.name);
+  formData.append("flow_type", profile.flow_type);
+  formData.append("file_name", profile.file_name);
+  formData.append("data_file", file, file.name);
 
   try {
     setBusy(true);
@@ -246,4 +392,9 @@ form.addEventListener("submit", async (event) => {
     setBusy(false);
     setError(error.message || "Erreur inattendue.");
   }
+});
+
+loadCatalog().catch(() => {
+  fallbackCatalog();
+  loadFlowOptions("output", "FICDEMA");
 });

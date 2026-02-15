@@ -7,7 +7,7 @@ from pathlib import Path
 from .models import ContractSpec, FieldSpec, FieldType, RecordSpec, SelectorSpec
 
 
-_DCL_OUTPUT_RE = re.compile(r"\bDCL\s+0?1\s+((?:DEMAT|STO_D)_[A-Z0-9_]+)\b", re.IGNORECASE)
+_DCL_STRUCT_RE = re.compile(r"\bDCL\s+0?1\s+([A-Z0-9_]+)\b", re.IGNORECASE)
 _FIELD_RE = re.compile(r"^\s*(\d+)\s+([A-Z0-9_]+)\s*(.*)$", re.IGNORECASE)
 _CHAR_RE = re.compile(r"\bCHAR\s*\(\s*(\d+)\s*\)", re.IGNORECASE)
 _PIC_RE = re.compile(r"\bPIC\s*'([^']+)'", re.IGNORECASE)
@@ -177,7 +177,13 @@ def _normalize_group_templates(group_fields: dict[str, list[FieldSpec]]) -> dict
     return normalized
 
 
-def _build_record_specs_from_text(source_text: str) -> list[RecordSpec]:
+def _build_record_specs_from_text(
+    source_text: str,
+    *,
+    structure_prefixes: tuple[str, ...] | None = None,
+    structure_names: set[str] | None = None,
+    preserve_structure_names: bool = False,
+) -> list[RecordSpec]:
     records_by_name: dict[str, RecordSpec] = {}
     templates_by_structure: dict[str, dict[str, list[FieldSpec]]] = {}
     current_structure: str | None = None
@@ -185,6 +191,25 @@ def _build_record_specs_from_text(source_text: str) -> list[RecordSpec]:
     current_fields: list[FieldSpec] = []
     current_group_fields: dict[str, list[FieldSpec]] = {}
     current_position = 0
+
+    normalized_prefixes = tuple((prefix or "").upper() for prefix in (structure_prefixes or ()))
+    normalized_names = {name.upper() for name in (structure_names or set())}
+    if not normalized_prefixes and not normalized_names:
+        normalized_prefixes = ("DEMAT_", "STO_D_")
+
+    def include_structure(name: str) -> bool:
+        upper = name.upper()
+        if upper in normalized_names:
+            return True
+        return any(upper.startswith(prefix) for prefix in normalized_prefixes)
+
+    def resolve_record_name(structure_name: str) -> str | None:
+        mapped = _structure_to_record_name(structure_name)
+        if mapped:
+            return mapped
+        if preserve_structure_names:
+            return structure_name
+        return None
 
     def flush_current() -> None:
         nonlocal current_structure, stack, current_fields, current_group_fields, current_position
@@ -194,14 +219,15 @@ def _build_record_specs_from_text(source_text: str) -> list[RecordSpec]:
         if current_fields:
             templates_by_structure[current_structure] = _normalize_group_templates(current_group_fields)
 
-            record_name = _structure_to_record_name(current_structure)
-            if record_name and record_name not in records_by_name:
-                selector_value = record_name[:3]
-                records_by_name[record_name] = RecordSpec(
-                    name=record_name,
-                    selector=SelectorSpec(start=1, length=3, value=selector_value),
-                    fields=current_fields,
-                )
+            if include_structure(current_structure):
+                record_name = resolve_record_name(current_structure)
+                if record_name and record_name not in records_by_name:
+                    selector_value = record_name[:3]
+                    records_by_name[record_name] = RecordSpec(
+                        name=record_name,
+                        selector=SelectorSpec(start=1, length=3, value=selector_value),
+                        fields=current_fields,
+                    )
 
         current_structure = None
         stack = []
@@ -214,10 +240,11 @@ def _build_record_specs_from_text(source_text: str) -> list[RecordSpec]:
         if not line:
             continue
 
-        start_match = _DCL_OUTPUT_RE.search(line)
+        start_match = _DCL_STRUCT_RE.search(line)
         if start_match:
+            next_structure = start_match.group(1).upper()
             flush_current()
-            current_structure = start_match.group(1).upper()
+            current_structure = next_structure
             stack = []
             current_fields = []
             current_group_fields = {}
@@ -228,15 +255,15 @@ def _build_record_specs_from_text(source_text: str) -> list[RecordSpec]:
             continue
 
         # Structure boundary can be reached by another DCL level 01.
-        if re.search(r"\bDCL\s+0?1\s+[A-Z0-9_]+\b", line, re.IGNORECASE):
+        boundary_match = _DCL_STRUCT_RE.search(line)
+        if boundary_match:
             flush_current()
-            another_match = _DCL_OUTPUT_RE.search(line)
-            if another_match:
-                current_structure = another_match.group(1).upper()
-                stack = []
-                current_fields = []
-                current_group_fields = {}
-                current_position = 0
+            next_structure = boundary_match.group(1).upper()
+            current_structure = next_structure
+            stack = []
+            current_fields = []
+            current_group_fields = {}
+            current_position = 0
             continue
 
         field_match = _FIELD_RE.match(line)
@@ -320,12 +347,23 @@ def _build_record_specs_from_text(source_text: str) -> list[RecordSpec]:
 
 
 def extract_contract_from_pli_source(
-    source_path: Path, source_program: str = "IDP470RA", strict: bool = True
+    source_path: Path,
+    source_program: str = "IDP470RA",
+    strict: bool = True,
+    *,
+    structure_prefixes: tuple[str, ...] | None = None,
+    structure_names: set[str] | None = None,
+    preserve_structure_names: bool = False,
 ) -> ContractSpec:
     text = source_path.read_text(encoding="latin-1")
-    records = _build_record_specs_from_text(text)
+    records = _build_record_specs_from_text(
+        text,
+        structure_prefixes=structure_prefixes,
+        structure_names=structure_names,
+        preserve_structure_names=preserve_structure_names,
+    )
     if not records:
-        raise ValueError("No DEMAT_* or STO_D_* structures found in source file.")
+        raise ValueError("No structure found for selected filters in source file.")
 
     line_lengths = {record.sum_of_lengths for record in records}
     if len(line_lengths) == 1:

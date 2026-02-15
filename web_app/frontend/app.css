@@ -97,6 +97,12 @@ body {
   gap: 10px;
 }
 
+.form-row {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
 .file-label,
 .label {
   font-size: 0.85rem;
@@ -111,6 +117,16 @@ input[type="file"] {
   border-radius: 12px;
   border: 1px solid var(--border);
   background: #f8fbff;
+}
+
+select {
+  width: 100%;
+  padding: 11px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: #f8fbff;
+  color: var(--ink);
+  font: inherit;
 }
 
 button {
@@ -342,7 +358,8 @@ button:disabled {
 
   .status-grid,
   .kpi-grid,
-  .downloads {
+  .downloads,
+  .form-row {
     grid-template-columns: 1fr;
   }
 

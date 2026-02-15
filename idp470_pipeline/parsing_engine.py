@@ -81,6 +81,9 @@ class FixedWidthParser:
             end = start + record.selector.length
             if line[start:end] == record.selector.value:
                 return record
+        if len(self.contract.record_types) == 1:
+            # Fallback for single-layout files where the selector token is not present in data.
+            return self.contract.record_types[0]
         return None
 
     def parse_line(self, line: str, line_number: int) -> dict[str, Any]:

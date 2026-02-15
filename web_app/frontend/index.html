@@ -10,7 +10,7 @@
       href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="/app.css?v=20260215-3" />
+    <link rel="stylesheet" href="/app.css?v=20260215-4" />
   </head>
   <body>
     <main class="page">
@@ -24,11 +24,21 @@
       </header>
 
       <section class="panel">
-        <h2>Lancer un traitement FACDEMA</h2>
-        <p class="hint">Le programme source utilise automatiquement IDP470RA. Chargez uniquement le fichier FACDEMA.</p>
+        <h2>Lancer un traitement</h2>
+        <p class="hint">Selectionnez le type de flux, puis le fichier logique. Le mapping est extrait automatiquement depuis IDP470RA.</p>
         <form id="jobForm" class="job-form">
-          <label for="facdemaFile" class="file-label">Fichier FACDEMA (.txt / .dat)</label>
-          <input id="facdemaFile" name="facdemaFile" type="file" accept=".txt,.dat" required />
+          <div class="form-row">
+            <div>
+              <label for="flowType" class="file-label">Type de flux</label>
+              <select id="flowType" name="flowType" required></select>
+            </div>
+            <div>
+              <label for="fileName" class="file-label">Fichier logique</label>
+              <select id="fileName" name="fileName" required></select>
+            </div>
+          </div>
+          <label for="dataFile" id="dataFileLabel" class="file-label">Charger le fichier (obligatoire)</label>
+          <input id="dataFile" name="dataFile" type="file" accept=".txt,.dat" required />
           <button id="launchBtn" type="submit">Extraction Excel/PDF</button>
         </form>
         <p id="errorBox" class="error hidden"></p>
@@ -93,6 +103,6 @@
         </div>
       </section>
     </main>
-    <script src="/app.js?v=20260215-3"></script>
+    <script src="/app.js?v=20260215-4"></script>
   </body>
 </html>

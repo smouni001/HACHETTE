@@ -10,7 +10,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from fastapi import BackgroundTasks, FastAPI, File, HTTPException, UploadFile
+from fastapi import BackgroundTasks, FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
@@ -45,6 +45,8 @@ def _utc_now() -> str:
 class JobState:
     job_id: str
     input_filename: str
+    flow_type: str = "output"
+    file_name: str = "FICDEMA"
     status: str = "queued"
     progress: int = 2
     message: str = "En attente"
@@ -64,9 +66,62 @@ class JobState:
     outputs: dict[str, str] = field(default_factory=dict)
 
 
+@dataclass(frozen=True)
+class FlowProfile:
+    flow_type: str
+    file_name: str
+    display_name: str
+    description: str
+    structure_prefixes: tuple[str, ...] = ()
+    structure_names: tuple[str, ...] = ()
+    preserve_structure_names: bool = False
+    apply_idil_rules: bool = False
+    supports_pdf: bool = False
+    strict_length_validation: bool = True
+
+    @property
+    def cache_key(self) -> str:
+        return f"{self.flow_type}:{self.file_name}"
+
+
+_FLOW_PROFILES: dict[tuple[str, str], FlowProfile] = {
+    ("output", "FICDEMA"): FlowProfile(
+        flow_type="output",
+        file_name="FICDEMA",
+        display_name="FICDEMA",
+        description="Flux output facture dematerialisee.",
+        structure_prefixes=("DEMAT_",),
+        apply_idil_rules=True,
+        supports_pdf=True,
+        strict_length_validation=True,
+    ),
+    ("output", "FICSTOD"): FlowProfile(
+        flow_type="output",
+        file_name="FICSTOD",
+        display_name="FICSTOD",
+        description="Flux output stock facture dematerialisee.",
+        structure_prefixes=("STO_D_",),
+        apply_idil_rules=True,
+        supports_pdf=True,
+        strict_length_validation=True,
+    ),
+    ("input", "FFAC3A"): FlowProfile(
+        flow_type="input",
+        file_name="FFAC3A",
+        display_name="FFAC3A",
+        description="Flux input source a facturer.",
+        structure_names=("WTFAC",),
+        preserve_structure_names=True,
+        apply_idil_rules=False,
+        supports_pdf=False,
+        strict_length_validation=False,
+    ),
+}
+
+
 _JOBS: dict[str, JobState] = {}
 _JOBS_LOCK = threading.Lock()
-_CONTRACT_CACHE = None
+_CONTRACT_CACHE: dict[str, Any] = {}
 _CONTRACT_LOCK = threading.Lock()
 
 
@@ -165,24 +220,52 @@ def _safe_media_type(path: Path) -> str:
     return "application/octet-stream"
 
 
-def _build_contract():
+def _normalize_flow_type(flow_type: str | None) -> str:
+    return (flow_type or "").strip().lower()
+
+
+def _normalize_file_name(file_name: str | None) -> str:
+    return (file_name or "").strip().upper()
+
+
+def _resolve_profile(flow_type: str, file_name: str) -> FlowProfile:
+    normalized_flow = _normalize_flow_type(flow_type)
+    normalized_file = _normalize_file_name(file_name)
+    profile = _FLOW_PROFILES.get((normalized_flow, normalized_file))
+    if profile is None:
+        allowed = ", ".join(
+            f"{profile.flow_type}/{profile.file_name}" for profile in _FLOW_PROFILES.values()
+        )
+        raise HTTPException(
+            status_code=400,
+            detail=f"Flux/fichier non supporte. Choix autorises: {allowed}",
+        )
+    return profile
+
+
+def _build_contract(profile: FlowProfile):
     return extract_contract_deterministic(
         source_path=SOURCE_PATH,
         source_program="IDP470RA",
-        strict=True,
+        strict=profile.strict_length_validation,
         spec_pdf_path=_safe_spec_pdf_path(),
+        structure_prefixes=profile.structure_prefixes or None,
+        structure_names=set(profile.structure_names) if profile.structure_names else None,
+        preserve_structure_names=profile.preserve_structure_names,
+        apply_idil_rules=profile.apply_idil_rules,
     )
 
 
-def _get_contract():
-    global _CONTRACT_CACHE
+def _get_contract(profile: FlowProfile):
     if not REUSE_CONTRACT:
-        return _build_contract()
+        return _build_contract(profile)
 
     with _CONTRACT_LOCK:
-        if _CONTRACT_CACHE is None:
-            _CONTRACT_CACHE = _build_contract()
-        return _CONTRACT_CACHE
+        cached = _CONTRACT_CACHE.get(profile.cache_key)
+        if cached is None:
+            cached = _build_contract(profile)
+            _CONTRACT_CACHE[profile.cache_key] = cached
+        return cached
 
 
 def _export_excel_fast(records: list[dict[str, Any]], output_path: Path) -> None:
@@ -194,7 +277,7 @@ def _export_excel_fast(records: list[dict[str, Any]], output_path: Path) -> None
         df.to_excel(writer, index=False, sheet_name="TOUS")
 
 
-def _process_job(job_id: str, input_path: Path) -> None:
+def _process_job(job_id: str, input_path: Path, profile: FlowProfile) -> None:
     workdir = _job_dir(job_id)
     output_dir = workdir / "outputs"
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -205,7 +288,7 @@ def _process_job(job_id: str, input_path: Path) -> None:
             raise FileNotFoundError(f"Source programme introuvable: {SOURCE_PATH}")
 
         _set_job(job_id, status="running", progress=10, message="Extraction du contrat en cours")
-        contract = _get_contract()
+        contract = _get_contract(profile)
 
         contract_path = output_dir / "idp470ra_contract.json"
         contract_path.write_text(
@@ -213,7 +296,7 @@ def _process_job(job_id: str, input_path: Path) -> None:
             encoding="utf-8",
         )
 
-        _set_job(job_id, progress=35, message="Parsing FACDEMA en cours")
+        _set_job(job_id, progress=35, message=f"Parsing {profile.file_name} en cours")
         parser = FixedWidthParser(contract)
         records, issues = parser.parse_file(
             input_path=input_path,
@@ -235,19 +318,26 @@ def _process_job(job_id: str, input_path: Path) -> None:
         else:
             export_to_excel(records=records, output_path=excel_path, contract=contract)
 
-        _set_job(job_id, progress=75, message="Generation PDF factures en cours")
         pdf_factures_path = output_dir / "facture_exemple.pdf"
-        try:
-            export_first_invoice_pdf(records=records, output_path=pdf_factures_path, logo_path=_safe_logo_path())
-        except Exception as error:  # noqa: BLE001
-            warnings.append(f"PDF factures non genere: {error}")
-
-        _set_job(job_id, progress=90, message="Generation PDF synthese en cours")
         pdf_synthese_path = output_dir / "synthese_comptable.pdf"
-        try:
-            export_accounting_summary_pdf(records=records, output_path=pdf_synthese_path, logo_path=_safe_logo_path())
-        except Exception as error:  # noqa: BLE001
-            warnings.append(f"PDF synthese non genere: {error}")
+        if profile.supports_pdf:
+            _set_job(job_id, progress=75, message="Generation PDF factures en cours")
+            try:
+                export_first_invoice_pdf(records=records, output_path=pdf_factures_path, logo_path=_safe_logo_path())
+            except Exception as error:  # noqa: BLE001
+                warnings.append(f"PDF factures non genere: {error}")
+
+            _set_job(job_id, progress=90, message="Generation PDF synthese en cours")
+            try:
+                export_accounting_summary_pdf(
+                    records=records,
+                    output_path=pdf_synthese_path,
+                    logo_path=_safe_logo_path(),
+                )
+            except Exception as error:  # noqa: BLE001
+                warnings.append(f"PDF synthese non genere: {error}")
+        else:
+            _set_job(job_id, progress=90, message="Generation terminee pour ce flux")
 
         outputs: dict[str, str] = {
             "contract": str(contract_path),
@@ -292,10 +382,14 @@ class JobCreateResponse(BaseModel):
     job_id: str
     status: str
     message: str
+    flow_type: str
+    file_name: str
 
 
 class JobStatusResponse(BaseModel):
     job_id: str
+    flow_type: str
+    file_name: str
     status: str
     progress: int = Field(ge=0, le=100)
     message: str
@@ -306,6 +400,20 @@ class JobStatusResponse(BaseModel):
     warnings: list[str] = Field(default_factory=list)
     metrics: dict[str, int] = Field(default_factory=dict)
     downloads: dict[str, str] = Field(default_factory=dict)
+
+
+class CatalogProfileResponse(BaseModel):
+    flow_type: str
+    file_name: str
+    display_name: str
+    description: str
+
+
+class CatalogResponse(BaseModel):
+    source_program: str
+    default_flow_type: str
+    default_file_name: str
+    profiles: list[CatalogProfileResponse]
 
 
 def _download_links(job_id: str, job: JobState) -> dict[str, str]:
@@ -326,6 +434,8 @@ def _download_links(job_id: str, job: JobState) -> dict[str, str]:
 def _to_status_response(job_id: str, job: JobState) -> JobStatusResponse:
     return JobStatusResponse(
         job_id=job_id,
+        flow_type=job.flow_type,
+        file_name=job.file_name,
         status=job.status,
         progress=job.progress,
         message=job.message,
@@ -342,7 +452,7 @@ def _to_status_response(job_id: str, job: JobState) -> JobStatusResponse:
 app = FastAPI(
     title="IDIL PAPYRUS FACTURE DEMAT API",
     version="1.0.0",
-    description="API web pour extraction Mainframe FACDEMA vers Excel et PDF.",
+    description="API web pour extraction Mainframe dynamique vers Excel et PDF.",
 )
 
 app.add_middleware(
@@ -362,34 +472,70 @@ def health() -> dict[str, str]:
     }
 
 
+@app.get("/api/catalog", response_model=CatalogResponse)
+def catalog() -> CatalogResponse:
+    profiles = [
+        CatalogProfileResponse(
+            flow_type=profile.flow_type,
+            file_name=profile.file_name,
+            display_name=profile.display_name,
+            description=profile.description,
+        )
+        for profile in sorted(_FLOW_PROFILES.values(), key=lambda item: (item.flow_type, item.file_name))
+    ]
+    return CatalogResponse(
+        source_program="IDP470RA",
+        default_flow_type="output",
+        default_file_name="FICDEMA",
+        profiles=profiles,
+    )
+
+
 @app.post("/api/jobs", response_model=JobCreateResponse)
 async def create_job(
     background_tasks: BackgroundTasks,
-    facdema_file: UploadFile = File(...),
+    data_file: UploadFile | None = File(default=None),
+    facdema_file: UploadFile | None = File(default=None),
+    flow_type: str = Form(default="output"),
+    file_name: str = Form(default="FICDEMA"),
 ) -> JobCreateResponse:
-    if not facdema_file.filename:
-        raise HTTPException(status_code=400, detail="Nom de fichier FACDEMA manquant.")
+    profile = _resolve_profile(flow_type=flow_type, file_name=file_name)
+    uploaded_file = data_file or facdema_file
 
-    suffix = Path(facdema_file.filename).suffix.lower()
+    if uploaded_file is None or not uploaded_file.filename:
+        raise HTTPException(status_code=400, detail=f"Nom de fichier {profile.file_name} manquant.")
+
+    suffix = Path(uploaded_file.filename).suffix.lower()
     if suffix not in {".txt", ".dat"}:
         raise HTTPException(status_code=400, detail="Format autorise: .txt ou .dat")
 
-    payload = await facdema_file.read()
+    payload = await uploaded_file.read()
     if not payload:
-        raise HTTPException(status_code=400, detail="Le fichier FACDEMA est vide.")
+        raise HTTPException(status_code=400, detail=f"Le fichier {profile.file_name} est vide.")
 
     job_id = uuid.uuid4().hex[:12]
-    safe_name = Path(facdema_file.filename).name
+    safe_name = Path(uploaded_file.filename).name
     input_dir = _job_dir(job_id) / "input"
     input_dir.mkdir(parents=True, exist_ok=True)
     input_path = input_dir / safe_name
     input_path.write_bytes(payload)
 
     with _JOBS_LOCK:
-        _JOBS[job_id] = JobState(job_id=job_id, input_filename=safe_name)
+        _JOBS[job_id] = JobState(
+            job_id=job_id,
+            input_filename=safe_name,
+            flow_type=profile.flow_type,
+            file_name=profile.file_name,
+        )
 
-    background_tasks.add_task(_process_job, job_id, input_path)
-    return JobCreateResponse(job_id=job_id, status="queued", message="Traitement lance")
+    background_tasks.add_task(_process_job, job_id, input_path, profile)
+    return JobCreateResponse(
+        job_id=job_id,
+        status="queued",
+        message="Traitement lance",
+        flow_type=profile.flow_type,
+        file_name=profile.file_name,
+    )
 
 
 @app.get("/api/jobs/{job_id}", response_model=JobStatusResponse)
