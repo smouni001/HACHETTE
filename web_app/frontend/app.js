@@ -166,9 +166,12 @@ function setCatalogStatus(message, isLoading = false) {
 function formatCatalogReadyMessage(count, advancedMode) {
   const safeCount = Number.isFinite(count) ? count : 0;
   if (advancedMode) {
-    return `Catalogue charge: ${safeCount} fichier(s) detecte(s) dans IDP470RA.`;
+    return `Mode avance actif: ${safeCount} flux Input/Output disponible(s).`;
   }
-  return `Catalogue charge: ${safeCount} fichier(s) Factures disponible(s).`;
+  return (
+    `Mode standard actif: ${safeCount} fichier(s) de facturation disponible(s). ` +
+    "Activez le mode avance pour afficher tous les flux."
+  );
 }
 
 function setMetricValue(element, value) {
@@ -488,7 +491,7 @@ function loadFlowOptions(defaultFlowType = "output", defaultFileName = "FICDEMA"
 
 async function loadCatalog(preferredSelection = null) {
   const advancedMode = isAdvancedModeEnabled();
-  setCatalogStatus("Chargement du catalogue...", true);
+  setCatalogStatus("Analyse des flux IDP470RA en cours...", true);
   try {
     const response = await fetch(`/api/catalog?advanced=${advancedMode ? "true" : "false"}`);
     if (!response.ok) {
@@ -521,7 +524,9 @@ async function loadCatalog(preferredSelection = null) {
       loadFlowOptions("output", "FICDEMA");
     }
     setError("Catalogue non charge. Mode de secours active.");
-    setCatalogStatus(`Mode secours actif: ${catalogProfiles.length} fichier(s) charge(s).`);
+    setCatalogStatus(
+      `Mode secours actif: ${catalogProfiles.length} fichier(s) affiche(s), verification IDP470RA indisponible.`,
+    );
   }
 }
 
@@ -615,7 +620,7 @@ form.addEventListener("submit", async (event) => {
       String(cached.default_file_name || "FICDEMA").toUpperCase(),
     );
     setCatalogStatus(
-      `${formatCatalogReadyMessage(catalogProfiles.length, advancedMode)} (cache local)`,
+      `${formatCatalogReadyMessage(catalogProfiles.length, advancedMode)} (charge rapidement depuis le cache local)`,
     );
     loadCatalog().catch(() => {});
     return;
@@ -623,8 +628,10 @@ form.addEventListener("submit", async (event) => {
 
   fallbackCatalog();
   loadFlowOptions("output", "FICDEMA");
-  setCatalogStatus("Chargement initial du catalogue...", true);
+  setCatalogStatus("Initialisation du catalogue...", true);
   loadCatalog().catch(() => {
-    setCatalogStatus(`Mode secours actif: ${catalogProfiles.length} fichier(s) charge(s).`);
+    setCatalogStatus(
+      `Mode secours actif: ${catalogProfiles.length} fichier(s) affiche(s), verification IDP470RA indisponible.`,
+    );
   });
 })();
