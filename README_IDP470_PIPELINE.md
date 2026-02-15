@@ -151,6 +151,11 @@ Guide AWS ECS Fargate:
 
 - `web_app/deploy/aws-ecs-fargate.md`
 
+Guide Render (gratuit):
+
+- `render.yaml`
+- `web_app/README.md` (section hebergement Render)
+
 Pour masquer la barre superieure:
 
 1. Config locale: `.streamlit/config.toml` (deja fourni)

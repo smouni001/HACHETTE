@@ -58,3 +58,33 @@ Puis ouvrir:
 Guide complet:
 
 - `web_app/deploy/aws-ecs-fargate.md`
+
+## 6) Hebergement Render (gratuit)
+
+Le repo contient deja un blueprint `render.yaml` a la racine.
+
+### Deploiement en 1 clic (Blueprint)
+
+1. Ouvrir Render Dashboard
+2. `New` -> `Blueprint`
+3. Connecter le repo GitHub `smouni001/HACHETTE`
+4. Selectionner la branche `main`
+5. Valider le service `idil-papyrus-web` (plan `free`)
+6. Lancer le deploy
+
+Render utilisera automatiquement:
+
+- `Dockerfile` a la racine
+- `render.yaml` (variables env + healthcheck `/api/health`)
+
+### Apres deploiement
+
+- Ouvrir l'URL Render
+- Verifier `https://<votre-app>.onrender.com/api/health`
+- Charger un FACDEMA depuis l'interface
+- Verifier les telechargements Excel/PDF
+
+Note:
+
+- Le plan gratuit peut se mettre en veille (cold start au premier appel)
+- Le stockage local n'est pas persistant en gratuit

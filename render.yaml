@@ -1,0 +1,25 @@
+services:
+  - type: web
+    name: idil-papyrus-web
+    env: docker
+    plan: free
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    autoDeploy: true
+    healthCheckPath: /api/health
+    envVars:
+      - key: UVICORN_WORKERS
+        value: "1"
+      - key: IDP470_WEB_SOURCE
+        value: /app/IDP470RA.pli
+      - key: IDP470_WEB_SPEC_PDF
+        value: /app/2785 - DOCTECHN - Dilifac - Format IDIL.pdf
+      - key: IDP470_WEB_LOGO
+        value: /app/assets/logo_hachette_livre.png
+      - key: IDP470_WEB_JOBS_DIR
+        value: /app/web_app/jobs
+      - key: IDP470_WEB_INPUT_ENCODING
+        value: latin-1
+      - key: IDP470_WEB_CONTINUE_ON_ERROR
+        value: "false"
+
