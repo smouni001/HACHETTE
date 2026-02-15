@@ -163,6 +163,14 @@ function setCatalogStatus(message, isLoading = false) {
   catalogStatus.classList.toggle("is-loading", Boolean(isLoading));
 }
 
+function formatCatalogReadyMessage(count, advancedMode) {
+  const safeCount = Number.isFinite(count) ? count : 0;
+  if (advancedMode) {
+    return `Catalogue charge: ${safeCount} fichier(s) detecte(s) dans IDP470RA.`;
+  }
+  return `Catalogue charge: ${safeCount} fichier(s) Factures disponible(s).`;
+}
+
 function setMetricValue(element, value) {
   element.textContent = typeof value === "number" ? value.toLocaleString("fr-FR") : "0";
 }
@@ -504,7 +512,7 @@ async function loadCatalog(preferredSelection = null) {
       preferredFlow,
       preferredFile,
     );
-    setCatalogStatus(`Catalogue pret (${catalogProfiles.length} fichiers).`);
+    setCatalogStatus(formatCatalogReadyMessage(catalogProfiles.length, advancedMode));
   } catch (error) {
     fallbackCatalog();
     if (preferredSelection) {
@@ -513,7 +521,7 @@ async function loadCatalog(preferredSelection = null) {
       loadFlowOptions("output", "FICDEMA");
     }
     setError("Catalogue non charge. Mode de secours active.");
-    setCatalogStatus(`Mode secours actif (${catalogProfiles.length} fichiers).`);
+    setCatalogStatus(`Mode secours actif: ${catalogProfiles.length} fichier(s) charge(s).`);
   }
 }
 
@@ -606,15 +614,17 @@ form.addEventListener("submit", async (event) => {
       String(cached.default_flow_type || "output").toLowerCase(),
       String(cached.default_file_name || "FICDEMA").toUpperCase(),
     );
-    setCatalogStatus(`Catalogue charge depuis cache (${catalogProfiles.length} fichiers).`);
+    setCatalogStatus(
+      `${formatCatalogReadyMessage(catalogProfiles.length, advancedMode)} (cache local)`,
+    );
     loadCatalog().catch(() => {});
     return;
   }
 
   fallbackCatalog();
   loadFlowOptions("output", "FICDEMA");
-  setCatalogStatus(`Chargement initial (${catalogProfiles.length} fichiers).`, true);
+  setCatalogStatus("Chargement initial du catalogue...", true);
   loadCatalog().catch(() => {
-    setCatalogStatus(`Mode secours actif (${catalogProfiles.length} fichiers).`);
+    setCatalogStatus(`Mode secours actif: ${catalogProfiles.length} fichier(s) charge(s).`);
   });
 })();
