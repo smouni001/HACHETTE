@@ -10,7 +10,7 @@
       href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="/app.css?v=20260215-5" />
+    <link rel="stylesheet" href="/app.css?v=20260215-6" />
   </head>
   <body>
     <main class="page">
@@ -24,7 +24,7 @@
 
       <section class="panel">
         <h2>Lancer un traitement</h2>
-        <p class="hint">Selectionnez le type de flux puis le fichier. Le mapping est calcule automatiquement depuis IDP470RA selon le contexte metier.</p>
+        <p class="hint">Par defaut, seuls les fichiers Factures sont proposes. Activez le mode avance pour afficher tous les flux detectes dans IDP470RA.</p>
         <form id="jobForm" class="job-form">
           <div class="form-row">
             <div>
@@ -36,6 +36,10 @@
               <select id="fileName" name="fileName" required></select>
             </div>
           </div>
+          <label class="advanced-toggle">
+            <input id="advancedMode" name="advancedMode" type="checkbox" />
+            <span>Mode avance: afficher tous les fichiers (Input/Output)</span>
+          </label>
           <label for="dataFile" id="dataFileLabel" class="file-label">Charger le fichier (obligatoire)</label>
           <input id="dataFile" name="dataFile" type="file" accept=".txt,.dat" required />
           <button id="launchBtn" type="submit">Extraction Excel/PDF</button>
@@ -103,6 +107,6 @@
         </div>
       </section>
     </main>
-    <script src="/app.js?v=20260215-5"></script>
+    <script src="/app.js?v=20260215-6"></script>
   </body>
 </html>

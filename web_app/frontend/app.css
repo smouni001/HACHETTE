@@ -102,6 +102,29 @@ body {
   gap: 10px;
 }
 
+.advanced-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  width: fit-content;
+  padding: 9px 12px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: #f6fbff;
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.advanced-toggle input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--primary);
+}
+
+.advanced-toggle input:disabled + span {
+  opacity: 0.6;
+}
+
 .form-row {
   display: grid;
   gap: 10px;

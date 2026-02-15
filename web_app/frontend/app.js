@@ -1,6 +1,7 @@
 const form = document.getElementById("jobForm");
 const flowTypeSelect = document.getElementById("flowType");
 const fileNameSelect = document.getElementById("fileName");
+const advancedModeToggle = document.getElementById("advancedMode");
 const dataFileLabel = document.getElementById("dataFileLabel");
 const profileContext = document.getElementById("profileContext");
 const fileInput = document.getElementById("dataFile");
@@ -41,7 +42,7 @@ const STATUS_CONFIG = {
 };
 
 function fallbackCatalog() {
-  catalogProfiles = [
+  const profiles = [
     {
       flow_type: "output",
       file_name: "FICDEMA",
@@ -76,6 +77,9 @@ function fallbackCatalog() {
       raw_structures: ["WTFAC"],
     },
   ];
+  catalogProfiles = isAdvancedModeEnabled()
+    ? profiles
+    : profiles.filter((profile) => String(profile.view_mode || "").toLowerCase() === "invoice");
 }
 
 function setError(message) {
@@ -103,6 +107,7 @@ function setBusy(isBusy) {
   fileInput.disabled = isBusy;
   flowTypeSelect.disabled = isBusy;
   fileNameSelect.disabled = isBusy;
+  advancedModeToggle.disabled = isBusy;
   launchBtn.textContent = isBusy ? "Extraction en cours..." : "Extraction Excel/PDF";
 }
 
@@ -309,6 +314,10 @@ function selectedProfile() {
   );
 }
 
+function isAdvancedModeEnabled() {
+  return Boolean(advancedModeToggle?.checked);
+}
+
 function updateUploadLabel() {
   const profile = selectedProfile();
   if (!profile) {
@@ -322,6 +331,11 @@ function updateUploadLabel() {
   renderProfileContext(profile);
   resetKpisForProfile(profile);
   updateDownloadMode(profile);
+  if (!isAdvancedModeEnabled() && profile.view_mode !== "invoice") {
+    launchBtn.disabled = true;
+    setError("Mode standard actif: seuls les fichiers Factures sont autorises.");
+    return;
+  }
   launchBtn.disabled = !profile.supports_processing;
   if (!profile.supports_processing) {
     setError(
@@ -391,9 +405,10 @@ function loadFlowOptions(defaultFlowType = "output", defaultFileName = "FICDEMA"
   rebuildFileOptions(defaultFileName);
 }
 
-async function loadCatalog() {
+async function loadCatalog(preferredSelection = null) {
+  const advancedMode = isAdvancedModeEnabled();
   try {
-    const response = await fetch("/api/catalog");
+    const response = await fetch(`/api/catalog?advanced=${advancedMode ? "true" : "false"}`);
     if (!response.ok) {
       throw new Error("Catalogue indisponible");
     }
@@ -401,16 +416,26 @@ async function loadCatalog() {
     catalogProfiles = Array.isArray(payload.profiles) ? payload.profiles : [];
     if (catalogProfiles.length === 0) {
       fallbackCatalog();
-      loadFlowOptions("output", "FICDEMA");
+      if (preferredSelection) {
+        loadFlowOptions(preferredSelection.flow_type, preferredSelection.file_name);
+      } else {
+        loadFlowOptions("output", "FICDEMA");
+      }
       return;
     }
+    const preferredFlow = String(preferredSelection?.flow_type || payload.default_flow_type || "output").toLowerCase();
+    const preferredFile = String(preferredSelection?.file_name || payload.default_file_name || "FICDEMA").toUpperCase();
     loadFlowOptions(
-      String(payload.default_flow_type || "output").toLowerCase(),
-      String(payload.default_file_name || "FICDEMA").toUpperCase(),
+      preferredFlow,
+      preferredFile,
     );
   } catch (error) {
     fallbackCatalog();
-    loadFlowOptions("output", "FICDEMA");
+    if (preferredSelection) {
+      loadFlowOptions(preferredSelection.flow_type, preferredSelection.file_name);
+    } else {
+      loadFlowOptions("output", "FICDEMA");
+    }
     setError("Catalogue non charge. Mode de secours active.");
   }
 }
@@ -423,6 +448,14 @@ fileNameSelect.addEventListener("change", () => {
   updateUploadLabel();
 });
 
+advancedModeToggle.addEventListener("change", () => {
+  const currentSelection = {
+    flow_type: String(flowTypeSelect.value || "output").toLowerCase(),
+    file_name: String(fileNameSelect.value || "FICDEMA").toUpperCase(),
+  };
+  loadCatalog(currentSelection);
+});
+
 form.addEventListener("submit", async (event) => {
   event.preventDefault();
   setError("");
@@ -430,9 +463,14 @@ form.addEventListener("submit", async (event) => {
 
   const file = fileInput.files?.[0];
   const profile = selectedProfile();
+  const advancedMode = isAdvancedModeEnabled();
 
   if (!profile) {
     setError("Selection flux/fichier invalide.");
+    return;
+  }
+  if (!advancedMode && profile.view_mode !== "invoice") {
+    setError("Mode standard actif: seuls les fichiers Factures sont autorises.");
     return;
   }
   if (!profile.supports_processing) {
@@ -447,6 +485,7 @@ form.addEventListener("submit", async (event) => {
   const formData = new FormData();
   formData.append("flow_type", profile.flow_type);
   formData.append("file_name", profile.file_name);
+  formData.append("advanced_mode", advancedMode ? "true" : "false");
   formData.append("data_file", file, file.name);
 
   try {

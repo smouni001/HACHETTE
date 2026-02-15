@@ -278,6 +278,78 @@ def _selector_match_ratio(lines: list[str], contract: Any) -> float:
     return matches / len(lines)
 
 
+def _closest_length_gap(contract: Any, median_len: int) -> tuple[int, int]:
+    expected_lengths = sorted({record.max_end for record in contract.record_types})
+    max_expected = max(expected_lengths) if expected_lengths else contract.line_length
+    closest_gap = (
+        min(abs(median_len - expected) for expected in expected_lengths)
+        if expected_lengths
+        else abs(median_len - contract.line_length)
+    )
+    return closest_gap, max_expected
+
+
+def _compatibility_score(profile: FlowProfile, lines: list[str]) -> float:
+    if not lines:
+        return 0.0
+    try:
+        contract = _get_contract(profile)
+    except Exception:  # noqa: BLE001
+        return 0.0
+
+    median_len = _median_length(lines)
+    selector_ratio = _selector_match_ratio(lines, contract)
+    closest_gap, max_expected = _closest_length_gap(contract, median_len)
+    length_tolerance = max(24, int(max_expected * 0.2))
+    length_score = max(0.0, 1.0 - min(closest_gap, length_tolerance * 2) / (length_tolerance * 2))
+
+    if profile.view_mode == "invoice":
+        return round(selector_ratio * 0.8 + length_score * 0.2, 4)
+    return round(max(selector_ratio, 0.15) * 0.6 + length_score * 0.4, 4)
+
+
+def _suggest_better_profile(profile: FlowProfile, lines: list[str]) -> FlowProfile | None:
+    if not lines:
+        return None
+
+    selected_score = _compatibility_score(profile, lines)
+    best_profile: FlowProfile | None = None
+    best_score = 0.0
+    for candidate in _get_flow_profiles().values():
+        if candidate.flow_type != profile.flow_type:
+            continue
+        if candidate.file_name == profile.file_name:
+            continue
+        if not candidate.supports_processing:
+            continue
+        candidate_score = _compatibility_score(candidate, lines)
+        if candidate_score > best_score:
+            best_score = candidate_score
+            best_profile = candidate
+
+    if best_profile is None:
+        return None
+    if best_score < 0.5:
+        return None
+    if best_score < selected_score + 0.18:
+        return None
+    return best_profile
+
+
+def _blocked_structure_message(profile: FlowProfile, base_reason: str, lines: list[str]) -> str:
+    suggestion = _suggest_better_profile(profile, lines)
+    if suggestion is None:
+        return (
+            f"Chargement bloque pour {profile.flow_type}/{profile.file_name}: {base_reason} "
+            "Le contenu du fichier ne respecte pas la structure IDP470RA attendue."
+        )
+    return (
+        f"Chargement bloque pour {profile.flow_type}/{profile.file_name}: {base_reason} "
+        f"Le contenu ressemble plutot a {suggestion.flow_type}/{suggestion.file_name} "
+        "d'apres la signature structurelle IDP470RA."
+    )
+
+
 def _validate_uploaded_payload_for_profile(profile: FlowProfile, payload: bytes) -> None:
     contract = _get_contract(profile)
     lines = _sample_lines_from_payload(payload)
@@ -285,9 +357,7 @@ def _validate_uploaded_payload_for_profile(profile: FlowProfile, payload: bytes)
         raise HTTPException(status_code=400, detail="Le fichier charge ne contient aucune ligne exploitable.")
 
     median_len = _median_length(lines)
-    expected_lengths = sorted({record.max_end for record in contract.record_types})
-    max_expected = max(expected_lengths) if expected_lengths else contract.line_length
-    closest_gap = min(abs(median_len - expected) for expected in expected_lengths) if expected_lengths else abs(median_len - contract.line_length)
+    closest_gap, max_expected = _closest_length_gap(contract, median_len)
     selector_ratio = _selector_match_ratio(lines, contract)
 
     if profile.view_mode == "invoice":
@@ -295,17 +365,19 @@ def _validate_uploaded_payload_for_profile(profile: FlowProfile, payload: bytes)
             selectors = ", ".join(sorted({record.selector.value for record in contract.record_types}))
             raise HTTPException(
                 status_code=400,
-                detail=(
-                    f"Le fichier charge ne correspond pas au flux {profile.file_name}: "
-                    f"signature des enregistrements attendue ({selectors})."
+                detail=_blocked_structure_message(
+                    profile,
+                    f"signature des enregistrements attendue ({selectors}) non detectee.",
+                    lines,
                 ),
             )
         if closest_gap > 12:
             raise HTTPException(
                 status_code=400,
-                detail=(
-                    f"Le fichier charge ne correspond pas au flux {profile.file_name}: "
-                    f"longueur mediane {median_len}, attendu proche de {max_expected}."
+                detail=_blocked_structure_message(
+                    profile,
+                    f"longueur mediane {median_len}, attendu proche de {max_expected}.",
+                    lines,
                 ),
             )
         return
@@ -315,9 +387,10 @@ def _validate_uploaded_payload_for_profile(profile: FlowProfile, payload: bytes)
         if selector_ratio < 0.1 and closest_gap > tolerance:
             raise HTTPException(
                 status_code=400,
-                detail=(
-                    f"Le fichier charge semble incompatible avec {profile.file_name}: "
-                    f"longueur mediane {median_len}, attendu proche de {max_expected}."
+                detail=_blocked_structure_message(
+                    profile,
+                    f"longueur mediane {median_len}, attendu proche de {max_expected}.",
+                    lines,
                 ),
             )
         return
@@ -326,9 +399,10 @@ def _validate_uploaded_payload_for_profile(profile: FlowProfile, payload: bytes)
     if selector_ratio < 0.1 and closest_gap > tolerance:
         raise HTTPException(
             status_code=400,
-            detail=(
-                f"Le fichier charge semble incompatible avec {profile.file_name}: "
-                "aucune signature d'enregistrement detectee sur l'echantillon."
+            detail=_blocked_structure_message(
+                profile,
+                "aucune signature d'enregistrement detectee sur l'echantillon.",
+                lines,
             ),
         )
 
@@ -715,6 +789,7 @@ class CatalogResponse(BaseModel):
     source_program: str
     default_flow_type: str
     default_file_name: str
+    advanced_mode: bool
     profiles: list[CatalogProfileResponse]
 
 
@@ -778,8 +853,11 @@ def health() -> dict[str, str]:
 
 
 @app.get("/api/catalog", response_model=CatalogResponse)
-def catalog() -> CatalogResponse:
+def catalog(advanced: bool = False) -> CatalogResponse:
     profiles_map = _get_flow_profiles()
+    filtered_profiles = [profile for profile in profiles_map.values() if advanced or profile.view_mode == "invoice"]
+    if not filtered_profiles:
+        filtered_profiles = list(profiles_map.values())
     profiles = [
         CatalogProfileResponse(
             flow_type=profile.flow_type,
@@ -792,9 +870,10 @@ def catalog() -> CatalogResponse:
             supports_pdf=profile.supports_pdf,
             raw_structures=list(profile.raw_structures),
         )
-        for profile in sorted(profiles_map.values(), key=lambda item: (item.flow_type, item.file_name))
+        for profile in sorted(filtered_profiles, key=lambda item: (item.flow_type, item.file_name))
     ]
-    default_profile = profiles_map.get(("output", "FICDEMA"))
+    filtered_map = {(profile.flow_type, profile.file_name): profile for profile in filtered_profiles}
+    default_profile = filtered_map.get(("output", "FICDEMA"))
     if default_profile is None and profiles:
         first = profiles[0]
         default_flow_type = first.flow_type
@@ -806,6 +885,7 @@ def catalog() -> CatalogResponse:
         source_program="IDP470RA",
         default_flow_type=default_flow_type,
         default_file_name=default_file_name,
+        advanced_mode=advanced,
         profiles=profiles,
     )
 
@@ -817,8 +897,17 @@ async def create_job(
     facdema_file: UploadFile | None = File(default=None),
     flow_type: str = Form(default="output"),
     file_name: str = Form(default="FICDEMA"),
+    advanced_mode: bool = Form(default=False),
 ) -> JobCreateResponse:
     profile = _resolve_profile(flow_type=flow_type, file_name=file_name)
+    if not advanced_mode and profile.view_mode != "invoice":
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "Mode standard actif: seuls les fichiers Factures sont autorises. "
+                "Activez le mode avance pour charger ce fichier."
+            ),
+        )
     if not profile.supports_processing:
         raise HTTPException(
             status_code=400,

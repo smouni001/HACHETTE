@@ -49,7 +49,11 @@ Puis ouvrir:
 
 - `GET /api/health`
 - `GET /api/catalog` (liste dynamique des flux/fichiers detectes dans `IDP470RA`)
-- `POST /api/jobs` (form-data: `flow_type`, `file_name`, `data_file`)
+  - par defaut: seulement les fichiers Factures
+  - mode avance: `GET /api/catalog?advanced=true` pour afficher tous les fichiers
+- `POST /api/jobs` (form-data: `flow_type`, `file_name`, `data_file`, `advanced_mode`)
+  - en mode standard (`advanced_mode=false`), seuls les fichiers Factures sont acceptes
+  - le backend bloque le chargement si la signature structurelle du fichier ne correspond pas au fichier logique choisi
 - `GET /api/jobs/{job_id}`
 - `GET /api/jobs/{job_id}/download/excel`
 - `GET /api/jobs/{job_id}/download/pdf-factures`
