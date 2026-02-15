@@ -8,6 +8,9 @@
   --primary: #0f766e;
   --primary-2: #0ea5a3;
   --danger: #b42318;
+  --success: #067647;
+  --warning: #b54708;
+  --info: #0f4f74;
   --warn-bg: #fff5eb;
   --warn-border: #f3d2b0;
 }
@@ -562,6 +565,237 @@ button:disabled {
   display: none;
 }
 
+.toast-host {
+  position: fixed;
+  top: 18px;
+  right: 18px;
+  width: min(420px, calc(100vw - 28px));
+  display: grid;
+  gap: 10px;
+  z-index: 1200;
+}
+
+.toast-card {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 10px;
+  align-items: start;
+  padding: 11px 12px;
+  border-radius: 13px;
+  border: 1px solid #c7d8ea;
+  background: #ffffff;
+  box-shadow: 0 14px 24px rgba(16, 34, 53, 0.14);
+  animation: toast-in 0.22s ease;
+}
+
+.toast-card.is-success {
+  border-color: #9de0c4;
+}
+
+.toast-card.is-error {
+  border-color: #f2b4b4;
+}
+
+.toast-card.is-warning {
+  border-color: #f4cd9f;
+}
+
+.toast-card.is-info {
+  border-color: #b5d3e8;
+}
+
+.toast-icon {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #ffffff;
+  font-size: 0.84rem;
+  font-weight: 700;
+}
+
+.toast-card.is-success .toast-icon {
+  background: var(--success);
+}
+
+.toast-card.is-error .toast-icon {
+  background: var(--danger);
+}
+
+.toast-card.is-warning .toast-icon {
+  background: var(--warning);
+}
+
+.toast-card.is-info .toast-icon {
+  background: var(--info);
+}
+
+.toast-content strong {
+  display: block;
+  font-size: 0.92rem;
+  font-family: "Space Grotesk", sans-serif;
+  margin-bottom: 2px;
+}
+
+.toast-content p {
+  margin: 0;
+  font-size: 0.9rem;
+  line-height: 1.35;
+  color: #30465f;
+}
+
+.toast-actions {
+  display: inline-flex;
+  gap: 8px;
+  margin-top: 7px;
+}
+
+.toast-action {
+  border: 1px solid #b8cbde;
+  border-radius: 9px;
+  background: #f6faff;
+  color: #1f4765;
+  font-size: 0.82rem;
+  padding: 5px 8px;
+}
+
+.toast-close {
+  width: 30px;
+  height: 30px;
+  border-radius: 9px;
+  border: 1px solid #d1dcea;
+  background: #f7faff;
+  color: #2f4a67;
+  font-size: 1rem;
+  line-height: 1;
+  padding: 0;
+}
+
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: rgba(10, 20, 35, 0.36);
+  backdrop-filter: blur(2px);
+  z-index: 1400;
+}
+
+.modal-card {
+  position: relative;
+  width: min(520px, 96vw);
+  border-radius: 18px;
+  border: 1px solid #c1d3e7;
+  background: linear-gradient(160deg, #ffffff 0%, #f8fcff 100%);
+  box-shadow: 0 24px 36px rgba(9, 25, 45, 0.22);
+  padding: 18px 18px 16px;
+  animation: modal-in 0.18s ease-out;
+}
+
+.modal-close {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  width: 31px;
+  height: 31px;
+  border-radius: 50%;
+  border: 1px solid #d6e1ee;
+  background: #f9fcff;
+  color: #304a64;
+  font-size: 1.2rem;
+  font-weight: 600;
+  padding: 0;
+}
+
+.modal-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding-right: 34px;
+}
+
+.modal-icon {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #ffffff;
+  font-weight: 700;
+}
+
+.modal-icon.is-success {
+  background: var(--success);
+}
+
+.modal-icon.is-error {
+  background: var(--danger);
+}
+
+.modal-icon.is-warning {
+  background: var(--warning);
+}
+
+.modal-icon.is-info {
+  background: var(--info);
+}
+
+.modal-head h3 {
+  margin: 0;
+  font-family: "Space Grotesk", sans-serif;
+  font-size: 1.18rem;
+}
+
+.modal-message {
+  margin: 10px 0 0;
+  color: #2f4661;
+  line-height: 1.5;
+}
+
+.modal-actions {
+  margin-top: 14px;
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.modal-actions button {
+  min-width: 116px;
+}
+
+.modal-actions .secondary-btn {
+  color: #284666;
+  border-color: #b9cde2;
+}
+
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes modal-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
 @media (max-width: 860px) {
   .hero {
     flex-direction: column;
@@ -596,5 +830,11 @@ button:disabled {
   .switch-mode-badge {
     grid-column: 1 / -1;
     justify-self: start;
+  }
+
+  .toast-host {
+    left: 14px;
+    right: 14px;
+    width: auto;
   }
 }

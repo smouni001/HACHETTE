@@ -13,10 +13,16 @@ const dataFileLabel = document.getElementById("dataFileLabel");
 const profileContext = document.getElementById("profileContext");
 const fileInput = document.getElementById("dataFile");
 const launchBtn = document.getElementById("launchBtn");
-const errorBox = document.getElementById("errorBox");
 const warningBox = document.getElementById("warningBox");
 const statusPanel = document.getElementById("statusPanel");
 const statusBadge = document.getElementById("statusBadge");
+const toastHost = document.getElementById("toastHost");
+const alertModal = document.getElementById("alertModal");
+const alertModalIcon = document.getElementById("alertModalIcon");
+const alertModalTitle = document.getElementById("alertModalTitle");
+const alertModalMessage = document.getElementById("alertModalMessage");
+const alertModalActions = document.getElementById("alertModalActions");
+const alertModalClose = document.getElementById("alertModalClose");
 
 const jobIdValue = document.getElementById("jobIdValue");
 const statusValue = document.getElementById("statusValue");
@@ -43,6 +49,8 @@ let catalogSourceProgram = "programme";
 let knownPrograms = [];
 let catalogProfiles = [];
 let localProgramId = null;
+let completionNotifiedForJob = null;
+const noticeHistory = new Map();
 const CATALOG_CACHE_TTL_MS = 5 * 60 * 1000;
 const LOCAL_PROGRAM_OPTION_VALUE = "__local_program__";
 const CATALOG_REQUEST_TIMEOUT_MS = 25000;
@@ -95,14 +103,182 @@ function fallbackCatalog() {
     : profiles.filter((profile) => String(profile.view_mode || "").toLowerCase() === "invoice");
 }
 
-function setError(message) {
-  if (!message) {
-    errorBox.textContent = "";
-    errorBox.classList.add("hidden");
+function noticeType(type) {
+  const safe = String(type || "info").toLowerCase();
+  if (safe === "success" || safe === "error" || safe === "warning" || safe === "info") {
+    return safe;
+  }
+  return "info";
+}
+
+function noticeIcon(type) {
+  const safe = noticeType(type);
+  if (safe === "success") {
+    return "OK";
+  }
+  if (safe === "error") {
+    return "!";
+  }
+  if (safe === "warning") {
+    return "W";
+  }
+  return "i";
+}
+
+function shouldThrottleNotice(key, windowMs = 2200) {
+  const safeKey = String(key || "");
+  if (!safeKey) {
+    return false;
+  }
+  const now = Date.now();
+  const previous = noticeHistory.get(safeKey) || 0;
+  noticeHistory.set(safeKey, now);
+  return now - previous < windowMs;
+}
+
+function dismissModal() {
+  if (!alertModal) {
     return;
   }
-  errorBox.textContent = message;
-  errorBox.classList.remove("hidden");
+  alertModal.classList.add("hidden");
+  alertModalTitle.textContent = "";
+  alertModalMessage.textContent = "";
+  alertModalActions.innerHTML = "";
+}
+
+function renderModalAction(label, className, onClick) {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = className;
+  button.textContent = label;
+  button.addEventListener("click", async () => {
+    try {
+      if (typeof onClick === "function") {
+        await onClick();
+      }
+    } finally {
+      dismissModal();
+    }
+  });
+  return button;
+}
+
+function openModal({
+  type = "info",
+  title = "Information",
+  message = "",
+  primaryLabel = "Fermer",
+  onPrimary = null,
+  secondaryLabel = "",
+  onSecondary = null,
+} = {}) {
+  if (!alertModal) {
+    return;
+  }
+  const safeType = noticeType(type);
+  alertModalIcon.className = `modal-icon is-${safeType}`;
+  alertModalIcon.textContent = noticeIcon(safeType);
+  alertModalTitle.textContent = title;
+  alertModalMessage.textContent = message;
+  alertModalActions.innerHTML = "";
+
+  if (secondaryLabel) {
+    alertModalActions.appendChild(renderModalAction(secondaryLabel, "secondary-btn", onSecondary));
+  }
+  alertModalActions.appendChild(renderModalAction(primaryLabel, "", onPrimary));
+  alertModal.classList.remove("hidden");
+}
+
+function showToast({ type = "info", title = "Notification", message = "", durationMs = 4800, actionLabel = "", onAction = null } = {}) {
+  if (!toastHost || !message) {
+    return;
+  }
+  const safeType = noticeType(type);
+  const toast = document.createElement("div");
+  toast.className = `toast-card is-${safeType}`;
+
+  const icon = document.createElement("span");
+  icon.className = "toast-icon";
+  icon.textContent = noticeIcon(safeType);
+
+  const content = document.createElement("div");
+  content.className = "toast-content";
+  const strong = document.createElement("strong");
+  strong.textContent = title;
+  const text = document.createElement("p");
+  text.textContent = message;
+  content.appendChild(strong);
+  content.appendChild(text);
+
+  if (actionLabel) {
+    const actions = document.createElement("div");
+    actions.className = "toast-actions";
+    const actionBtn = document.createElement("button");
+    actionBtn.type = "button";
+    actionBtn.className = "toast-action";
+    actionBtn.textContent = actionLabel;
+    actionBtn.addEventListener("click", async () => {
+      if (typeof onAction === "function") {
+        await onAction();
+      }
+      toast.remove();
+    });
+    actions.appendChild(actionBtn);
+    content.appendChild(actions);
+  }
+
+  const closeBtn = document.createElement("button");
+  closeBtn.type = "button";
+  closeBtn.className = "toast-close";
+  closeBtn.setAttribute("aria-label", "Fermer");
+  closeBtn.textContent = "x";
+  closeBtn.addEventListener("click", () => toast.remove());
+
+  toast.appendChild(icon);
+  toast.appendChild(content);
+  toast.appendChild(closeBtn);
+  toastHost.prepend(toast);
+
+  if (durationMs > 0) {
+    window.setTimeout(() => {
+      toast.remove();
+    }, durationMs);
+  }
+}
+
+function isStructureMismatchMessage(message) {
+  const text = String(message || "").toLowerCase();
+  return (
+    text.includes("chargement bloque") ||
+    text.includes("ne respecte pas la structure") ||
+    text.includes("signature structurelle") ||
+    text.includes("longueur mediane")
+  );
+}
+
+function setError(message) {
+  if (!message) {
+    return;
+  }
+  const text = String(message || "");
+  if (shouldThrottleNotice(`error:${text}`)) {
+    return;
+  }
+  if (isStructureMismatchMessage(text)) {
+    openModal({
+      type: "error",
+      title: "Erreur de chargement",
+      message: text,
+      primaryLabel: "Compris",
+    });
+    return;
+  }
+  showToast({
+    type: "error",
+    title: "Erreur",
+    message: text,
+    durationMs: 6500,
+  });
 }
 
 function setWarnings(warnings) {
@@ -186,6 +362,40 @@ function setCatalogStatus(message, isLoading = false) {
   }
   catalogStatus.textContent = message || "";
   catalogStatus.classList.toggle("is-loading", Boolean(isLoading));
+}
+
+function notifyNoFlow(programName) {
+  const safeProgram = programName || "le programme selectionne";
+  const throttleKey = `no-flow:${safeProgram}:${isAdvancedModeEnabled() ? "advanced" : "standard"}`;
+  if (shouldThrottleNotice(throttleKey, 3000)) {
+    return;
+  }
+  const message =
+    `Aucun flux n'a ete trouve pour ${safeProgram}. ` +
+    "Verifiez le programme selectionne, ou activez la vue globale pour afficher tous les fichiers.";
+
+  if (!isAdvancedModeEnabled()) {
+    openModal({
+      type: "warning",
+      title: "Aucun flux disponible",
+      message,
+      primaryLabel: "Activer la vue globale",
+      onPrimary: async () => {
+        advancedModeToggle.checked = true;
+        setAdvancedModeIndicator();
+        await loadCatalog();
+      },
+      secondaryLabel: "Fermer",
+    });
+    return;
+  }
+
+  openModal({
+    type: "warning",
+    title: "Aucun flux disponible",
+    message,
+    primaryLabel: "Fermer",
+  });
 }
 
 async function fetchWithTimeout(url, options = {}, timeoutMs = CATALOG_REQUEST_TIMEOUT_MS) {
@@ -305,9 +515,15 @@ async function registerLocalProgram() {
     upsertProgram(program);
     rebuildProgramOptions(localProgramId);
     setLocalProgramStatus(`Programme local charge: ${program.display_name} (${program.source_program}).`);
+    showToast({
+      type: "success",
+      title: "Programme local analyse",
+      message: `Le programme ${program.source_program || program.program_id} est pret.`,
+    });
     return localProgramId;
   } catch (error) {
     setLocalProgramStatus(error.message || "Echec de l'analyse du programme local.", true);
+    setError(error.message || "Echec de l'analyse du programme local.");
     return null;
   } finally {
     loadLocalProgramBtn.disabled = false;
@@ -332,7 +548,11 @@ async function loadPrograms() {
   } catch (error) {
     fallbackPrograms();
     rebuildProgramOptions("idp470ra");
-    setError("Liste des programmes indisponible. Programme par defaut active.");
+    showToast({
+      type: "warning",
+      title: "Mode degrade",
+      message: "Liste des programmes indisponible. Programme par defaut active.",
+    });
     return "idp470ra";
   }
 }
@@ -518,6 +738,14 @@ async function pollOnce(jobId) {
   if (payload.status === "completed" || payload.status === "failed") {
     stopPolling();
     setBusy(false);
+    if (payload.status === "completed" && completionNotifiedForJob !== payload.job_id) {
+      completionNotifiedForJob = payload.job_id;
+      showToast({
+        type: "success",
+        title: "Extraction terminee",
+        message: "Le traitement est termine. Les fichiers Excel/PDF sont disponibles au telechargement.",
+      });
+    }
     if (payload.status === "failed" && payload.error) {
       setError(payload.error);
     }
@@ -684,9 +912,11 @@ async function loadCatalog(preferredSelection = null) {
       fileNameSelect.innerHTML = "";
       renderProfileContext(null);
       launchBtn.disabled = true;
-      setCatalogStatus(
-        `Aucun flux exploitable detecte pour ${catalogSourceProgram}. Chargez un autre programme ou activez la vue globale.`,
-      );
+      const noFlowMessage =
+        `Aucun flux exploitable detecte pour ${catalogSourceProgram}. ` +
+        "Verifiez votre selection de programme ou la source chargee.";
+      setCatalogStatus(noFlowMessage);
+      notifyNoFlow(catalogSourceProgram);
       return;
     }
     const preferredFlow = String(preferredSelection?.flow_type || payload.default_flow_type || "output").toLowerCase();
@@ -710,8 +940,33 @@ async function loadCatalog(preferredSelection = null) {
     setCatalogStatus(
       `Mode secours actif: ${catalogProfiles.length} fichier(s) affiche(s), verification structurelle indisponible.`,
     );
+    showToast({
+      type: "warning",
+      title: "Catalogue en mode secours",
+      message: "Le catalogue principal n'est pas joignable. Verification structurelle limitee.",
+    });
   }
 }
+
+if (alertModalClose) {
+  alertModalClose.addEventListener("click", () => {
+    dismissModal();
+  });
+}
+
+if (alertModal) {
+  alertModal.addEventListener("click", (event) => {
+    if (event.target === alertModal) {
+      dismissModal();
+    }
+  });
+}
+
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape" && alertModal && !alertModal.classList.contains("hidden")) {
+    dismissModal();
+  }
+});
 
 flowTypeSelect.addEventListener("change", () => {
   rebuildFileOptions();
@@ -795,6 +1050,7 @@ form.addEventListener("submit", async (event) => {
 
   try {
     setBusy(true);
+    completionNotifiedForJob = null;
     const response = await fetch("/api/jobs", {
       method: "POST",
       body: formData,

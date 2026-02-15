@@ -10,7 +10,7 @@
       href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="/app.css?v=20260215-11" />
+    <link rel="stylesheet" href="/app.css?v=20260215-12" />
   </head>
   <body>
     <main class="page">
@@ -67,7 +67,6 @@
           <button id="launchBtn" type="submit">Extraction Excel/PDF</button>
         </form>
         <p id="profileContext" class="hint profile-context"></p>
-        <p id="errorBox" class="error hidden"></p>
       </section>
 
       <section id="statusPanel" class="panel status-panel" data-state="queued">
@@ -129,6 +128,21 @@
         </div>
       </section>
     </main>
-    <script src="/app.js?v=20260215-11"></script>
+
+    <div id="toastHost" class="toast-host" aria-live="polite" aria-atomic="false"></div>
+
+    <div id="alertModal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="alertModalTitle">
+      <div class="modal-card">
+        <button id="alertModalClose" type="button" class="modal-close" aria-label="Fermer">&times;</button>
+        <div class="modal-head">
+          <span id="alertModalIcon" class="modal-icon" aria-hidden="true"></span>
+          <h3 id="alertModalTitle"></h3>
+        </div>
+        <p id="alertModalMessage" class="modal-message"></p>
+        <div id="alertModalActions" class="modal-actions"></div>
+      </div>
+    </div>
+
+    <script src="/app.js?v=20260215-12"></script>
   </body>
 </html>
