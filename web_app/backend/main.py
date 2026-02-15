@@ -20,6 +20,7 @@ from pydantic import BaseModel, Field
 
 from idp470_pipeline.deterministic_extractor import extract_contract_deterministic
 from idp470_pipeline.exporters import export_accounting_summary_pdf, export_first_invoice_pdf, export_to_excel
+from idp470_pipeline.models import ContractSpec, FieldSpec, FieldType, RecordSpec, SelectorSpec
 from idp470_pipeline.parsing_engine import FixedWidthParser, save_jsonl
 
 LOGGER = logging.getLogger(__name__)
@@ -147,6 +148,7 @@ class ProgramRuntime:
 
 
 _DCL_FILE_RE = re.compile(r"\bDCL\s+([A-Z0-9_]+)\s+FILE\b([^;]*);", re.IGNORECASE)
+_FILE_RECSIZE_RE = re.compile(r"\b(?:RECSIZE|BLKSIZE)\s*\(\s*(\d+)\s*\)", re.IGNORECASE)
 _WRITE_FILE_RE = re.compile(
     r"\bWRITE\s+FILE\s*\(\s*([A-Z0-9_]+)\s*\)\s+FROM\s*\(?\s*([A-Z0-9_]+)\s*\)?",
     re.IGNORECASE,
@@ -760,21 +762,93 @@ def _resolve_profile(program_id: str, flow_type: str, file_name: str) -> FlowPro
     return profile
 
 
+def _declared_line_length(program: ProgramRuntime, file_name: str) -> int | None:
+    target = _normalize_file_name(file_name)
+    if not target:
+        return None
+    try:
+        text = program.source_path.read_text(encoding=program.source_encoding)
+    except Exception:  # noqa: BLE001
+        return None
+
+    for raw_line in text.splitlines():
+        line = _normalize_source_line(raw_line)
+        if not line:
+            continue
+        match = _DCL_FILE_RE.search(line)
+        if not match:
+            continue
+        declared_name = match.group(1).upper()
+        if declared_name != target:
+            continue
+        tail = match.group(2) or ""
+        sizes = [int(value) for value in _FILE_RECSIZE_RE.findall(tail)]
+        if sizes:
+            return max(sizes)
+    return None
+
+
+def _build_raw_fallback_contract(program: ProgramRuntime, profile: FlowProfile) -> ContractSpec:
+    line_length = _declared_line_length(program, profile.file_name) or 1200
+    record_name = _normalize_file_name(profile.file_name) or "RAW"
+    return ContractSpec(
+        source_program=program.source_program,
+        line_length=line_length,
+        strict_length_validation=False,
+        strict_structure_validation=False,
+        structure_source="fallback_raw",
+        record_types=[
+            RecordSpec(
+                name=record_name,
+                selector=SelectorSpec(start=1, length=1, value="*"),
+                fields=[
+                    FieldSpec(
+                        name="RAW_LINE",
+                        start=1,
+                        length=line_length,
+                        type=FieldType.STRING,
+                        description=(
+                            "Fallback technique: structure DETAILLEE indisponible, "
+                            "enregistrement charge en ligne brute."
+                        ),
+                    )
+                ],
+            )
+        ],
+    )
+
+
 def _build_contract(program: ProgramRuntime, profile: FlowProfile):
     if program.analyzer_engine not in SUPPORTED_ANALYZERS:
         raise ValueError(
             f"Moteur d'analyse non supporte '{program.analyzer_engine}' pour {program.program_id}."
         )
-    return extract_contract_deterministic(
-        source_path=program.source_path,
-        source_program=program.source_program,
-        strict=profile.strict_length_validation,
-        spec_pdf_path=_safe_spec_pdf_path(program),
-        structure_prefixes=profile.structure_prefixes or None,
-        structure_names=set(profile.structure_names) if profile.structure_names else None,
-        preserve_structure_names=profile.preserve_structure_names,
-        apply_idil_rules=profile.apply_idil_rules,
-    )
+    try:
+        return extract_contract_deterministic(
+            source_path=program.source_path,
+            source_program=program.source_program,
+            strict=profile.strict_length_validation,
+            spec_pdf_path=_safe_spec_pdf_path(program),
+            structure_prefixes=profile.structure_prefixes or None,
+            structure_names=set(profile.structure_names) if profile.structure_names else None,
+            preserve_structure_names=profile.preserve_structure_names,
+            apply_idil_rules=profile.apply_idil_rules,
+        )
+    except ValueError as error:
+        message = str(error)
+        if "No structure found for selected filters in source file." not in message:
+            raise
+        if profile.view_mode == "invoice":
+            raise
+
+        LOGGER.warning(
+            "Fallback contrat brut active pour %s/%s (%s): %s",
+            profile.flow_type,
+            profile.file_name,
+            program.source_program,
+            message,
+        )
+        return _build_raw_fallback_contract(program, profile)
 
 
 def _program_contract_cache_key(program: ProgramRuntime, profile: FlowProfile) -> str:
