@@ -75,7 +75,7 @@ class FixedWidthParser:
                         f"attendu={self.contract.line_length}"
                     )
 
-    def _record_for_line(self, line: str) -> RecordSpec | None:
+    def _record_for_line(self, line: str, original_length: int) -> RecordSpec | None:
         for record in self.contract.record_types:
             start = record.selector.start - 1
             end = start + record.selector.length
@@ -84,10 +84,23 @@ class FixedWidthParser:
         if len(self.contract.record_types) == 1:
             # Fallback for single-layout files where the selector token is not present in data.
             return self.contract.record_types[0]
+        if original_length > 0:
+            # For generic multi-layout files, selectors may not be explicit.
+            # Use nearest record physical size as best-effort discriminator.
+            candidates = sorted(
+                self.contract.record_types,
+                key=lambda record: abs(record.max_end - original_length),
+            )
+            if candidates:
+                best = candidates[0]
+                ties = [record for record in candidates if abs(record.max_end - original_length) == abs(best.max_end - original_length)]
+                if len(ties) == 1:
+                    return best
         return None
 
     def parse_line(self, line: str, line_number: int) -> dict[str, Any]:
         effective_line = line
+        original_length = len(line)
         if len(line) != self.contract.line_length:
             if self.contract.strict_length_validation:
                 raise ParsingError(
@@ -98,7 +111,7 @@ class FixedWidthParser:
             else:
                 effective_line = line[: self.contract.line_length]
 
-        record = self._record_for_line(effective_line)
+        record = self._record_for_line(effective_line, original_length)
         if record is None:
             raise ParsingError(
                 f"Ligne {line_number}: type d'enregistrement inconnu aux positions configurees."

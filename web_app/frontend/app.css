@@ -92,6 +92,11 @@ body {
   color: var(--ink-soft);
 }
 
+.profile-context {
+  margin-top: 10px;
+  font-size: 0.95rem;
+}
+
 .job-form {
   display: grid;
   gap: 10px;
@@ -127,6 +132,10 @@ select {
   background: #f8fbff;
   color: var(--ink);
   font: inherit;
+}
+
+select:disabled {
+  opacity: 0.6;
 }
 
 button {

@@ -10,7 +10,7 @@
       href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="/app.css?v=20260215-4" />
+    <link rel="stylesheet" href="/app.css?v=20260215-5" />
   </head>
   <body>
     <main class="page">
@@ -25,7 +25,7 @@
 
       <section class="panel">
         <h2>Lancer un traitement</h2>
-        <p class="hint">Selectionnez le type de flux, puis le fichier logique. Le mapping est extrait automatiquement depuis IDP470RA.</p>
+        <p class="hint">Selectionnez le type de flux puis le fichier. Le mapping est calcule automatiquement depuis IDP470RA selon le contexte metier.</p>
         <form id="jobForm" class="job-form">
           <div class="form-row">
             <div>
@@ -41,6 +41,7 @@
           <input id="dataFile" name="dataFile" type="file" accept=".txt,.dat" required />
           <button id="launchBtn" type="submit">Extraction Excel/PDF</button>
         </form>
+        <p id="profileContext" class="hint profile-context"></p>
         <p id="errorBox" class="error hidden"></p>
       </section>
 
@@ -80,16 +81,16 @@
         <h2>Indicateurs</h2>
         <div class="kpi-grid">
           <article class="kpi-card">
-            <h3>Clients</h3>
-            <p id="clientCount">0</p>
+            <h3 id="kpiLabel1">Indicateur 1</h3>
+            <p id="kpiValue1">0</p>
           </article>
           <article class="kpi-card">
-            <h3>Factures</h3>
-            <p id="invoiceCount">0</p>
+            <h3 id="kpiLabel2">Indicateur 2</h3>
+            <p id="kpiValue2">0</p>
           </article>
           <article class="kpi-card">
-            <h3>Lignes fichier</h3>
-            <p id="lineCount">0</p>
+            <h3 id="kpiLabel3">Indicateur 3</h3>
+            <p id="kpiValue3">0</p>
           </article>
         </div>
       </section>
@@ -103,6 +104,6 @@
         </div>
       </section>
     </main>
-    <script src="/app.js?v=20260215-4"></script>
+    <script src="/app.js?v=20260215-5"></script>
   </body>
 </html>

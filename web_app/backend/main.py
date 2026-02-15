@@ -3,8 +3,10 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 import threading
 import uuid
+from collections import defaultdict
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
@@ -47,6 +49,8 @@ class JobState:
     input_filename: str
     flow_type: str = "output"
     file_name: str = "FICDEMA"
+    view_mode: str = "invoice"
+    role_label: str = "facturation"
     status: str = "queued"
     progress: int = 2
     message: str = "En attente"
@@ -63,6 +67,7 @@ class JobState:
             "records_count": 0,
         }
     )
+    kpis: list[dict[str, Any]] = field(default_factory=list)
     outputs: dict[str, str] = field(default_factory=dict)
 
 
@@ -72,55 +77,43 @@ class FlowProfile:
     file_name: str
     display_name: str
     description: str
+    role_label: str = "fichier metier"
+    view_mode: str = "generic"
     structure_prefixes: tuple[str, ...] = ()
     structure_names: tuple[str, ...] = ()
     preserve_structure_names: bool = False
     apply_idil_rules: bool = False
     supports_pdf: bool = False
+    supports_processing: bool = True
     strict_length_validation: bool = True
+    raw_structures: tuple[str, ...] = ()
 
     @property
     def cache_key(self) -> str:
         return f"{self.flow_type}:{self.file_name}"
 
 
-_FLOW_PROFILES: dict[tuple[str, str], FlowProfile] = {
-    ("output", "FICDEMA"): FlowProfile(
-        flow_type="output",
-        file_name="FICDEMA",
-        display_name="FICDEMA",
-        description="Flux output facture dematerialisee.",
-        structure_prefixes=("DEMAT_",),
-        apply_idil_rules=True,
-        supports_pdf=True,
-        strict_length_validation=True,
-    ),
-    ("output", "FICSTOD"): FlowProfile(
-        flow_type="output",
-        file_name="FICSTOD",
-        display_name="FICSTOD",
-        description="Flux output stock facture dematerialisee.",
-        structure_prefixes=("STO_D_",),
-        apply_idil_rules=True,
-        supports_pdf=True,
-        strict_length_validation=True,
-    ),
-    ("input", "FFAC3A"): FlowProfile(
-        flow_type="input",
-        file_name="FFAC3A",
-        display_name="FFAC3A",
-        description="Flux input source a facturer.",
-        structure_names=("WTFAC",),
-        preserve_structure_names=True,
-        apply_idil_rules=False,
-        supports_pdf=False,
-        strict_length_validation=False,
-    ),
-}
+_DCL_FILE_RE = re.compile(r"\bDCL\s+([A-Z0-9_]+)\s+FILE\b([^;]*);", re.IGNORECASE)
+_WRITE_FILE_RE = re.compile(
+    r"\bWRITE\s+FILE\s*\(\s*([A-Z0-9_]+)\s*\)\s+FROM\s*\(?\s*([A-Z0-9_]+)\s*\)?",
+    re.IGNORECASE,
+)
+_READ_FILE_RE = re.compile(
+    r"\bREAD\s+FILE\s*\(\s*([A-Z0-9_]+)\s*\)\s+INTO\s*\(?\s*([A-Z0-9_]+)\s*\)?",
+    re.IGNORECASE,
+)
+_BASED_ADDR_RE = re.compile(
+    r"\bDCL\s+0?1\s+([A-Z0-9_]+)\b[^;]*\bBASED\s*\(\s*ADDR\s*\(\s*([A-Z0-9_]+)\s*\)\s*\)",
+    re.IGNORECASE,
+)
+_COMMENT_RE = re.compile(r"/\*(.*?)\*/")
+_TRAILING_SEQ_RE = re.compile(r"\s+\d{5,}\s*$")
 
 
 _JOBS: dict[str, JobState] = {}
 _JOBS_LOCK = threading.Lock()
+_FLOW_PROFILES_CACHE: dict[tuple[str, str], FlowProfile] | None = None
+_FLOW_PROFILES_LOCK = threading.Lock()
 _CONTRACT_CACHE: dict[str, Any] = {}
 _CONTRACT_LOCK = threading.Lock()
 
@@ -195,6 +188,29 @@ def _client_count(records: list[dict[str, Any]]) -> int:
     return len(all_clients)
 
 
+def _build_kpis(
+    *,
+    profile: FlowProfile,
+    records: list[dict[str, Any]],
+    issues: list[Any],
+    contract: Any,
+) -> list[dict[str, Any]]:
+    if profile.view_mode == "invoice":
+        return [
+            {"key": "clients", "label": "Clients", "value": _client_count(records)},
+            {"key": "factures", "label": "Factures", "value": _invoice_count(records)},
+            {"key": "lignes", "label": "Lignes fichier", "value": len(records) + len(issues)},
+        ]
+
+    record_type_count = len({str(record.get("record_type", "")).strip() for record in records if str(record.get("record_type", "")).strip()})
+    field_count = sum(len(record.fields) for record in contract.record_types)
+    return [
+        {"key": "records", "label": "Enregistrements", "value": len(records)},
+        {"key": "types", "label": "Types detectes", "value": record_type_count},
+        {"key": "champs", "label": "Champs structures", "value": field_count},
+    ]
+
+
 def _safe_logo_path() -> Path | None:
     if LOGO_PATH.exists():
         return LOGO_PATH
@@ -220,6 +236,179 @@ def _safe_media_type(path: Path) -> str:
     return "application/octet-stream"
 
 
+def _normalize_source_line(raw_line: str) -> str:
+    line = raw_line.rstrip("\r\n")
+    line = _TRAILING_SEQ_RE.sub("", line)
+    if line and line[0].isdigit():
+        line = line[1:]
+    return line.rstrip()
+
+
+def _extract_inline_comment(line: str) -> str | None:
+    match = _COMMENT_RE.search(line)
+    if not match:
+        return None
+    cleaned = re.sub(r"\s+", " ", match.group(1) or "").strip()
+    return cleaned or None
+
+
+def _infer_role_label(*, file_name: str, description: str, structures: tuple[str, ...]) -> str:
+    upper_desc = description.upper()
+    if any(name.startswith("DEMAT_") or name.startswith("STO_D_") for name in structures):
+        return "facturation"
+    if "LOG" in upper_desc or "JOURNAL" in upper_desc:
+        return "journalisation"
+    if "INDEX" in upper_desc:
+        return "indexation"
+    if "HISTORIQUE" in upper_desc:
+        return "historisation"
+    if "EXPORT" in upper_desc:
+        return "export"
+    if "STOCK" in upper_desc:
+        return "stockage"
+    if "FACTURE" in upper_desc or file_name.startswith("FIC"):
+        return "facturation"
+    if file_name.startswith("ID"):
+        return "interface"
+    return "fichier metier"
+
+
+def _contract_can_be_built(
+    *,
+    strict_length_validation: bool,
+    structure_prefixes: tuple[str, ...],
+    structure_names: tuple[str, ...],
+    preserve_structure_names: bool,
+    apply_idil_rules: bool,
+) -> bool:
+    try:
+        extract_contract_deterministic(
+            source_path=SOURCE_PATH,
+            source_program="IDP470RA",
+            strict=strict_length_validation,
+            spec_pdf_path=_safe_spec_pdf_path(),
+            structure_prefixes=structure_prefixes or None,
+            structure_names=set(structure_names) if structure_names else None,
+            preserve_structure_names=preserve_structure_names,
+            apply_idil_rules=apply_idil_rules,
+        )
+        return True
+    except Exception as error:  # noqa: BLE001
+        LOGGER.debug("Profile mapping non exploitable (%s): %s", ",".join(structure_names) or ",".join(structure_prefixes), error)
+        return False
+
+
+def _discover_flow_profiles() -> dict[tuple[str, str], FlowProfile]:
+    text = SOURCE_PATH.read_text(encoding="latin-1")
+    declarations: dict[str, tuple[str, str]] = {}
+    file_to_structures: dict[str, set[str]] = defaultdict(set)
+    aliases_by_base: dict[str, set[str]] = defaultdict(set)
+
+    for raw_line in text.splitlines():
+        line = _normalize_source_line(raw_line)
+        if not line:
+            continue
+
+        decl_match = _DCL_FILE_RE.search(line)
+        if decl_match:
+            file_name = decl_match.group(1).upper()
+            tail = decl_match.group(2).upper()
+            flow_type = "output" if "OUTPUT" in tail else "input"
+            description = _extract_inline_comment(line) or f"Flux {flow_type} {file_name}"
+            declarations[file_name] = (flow_type, description)
+
+        for write_match in _WRITE_FILE_RE.finditer(line):
+            file_name = write_match.group(1).upper()
+            structure_name = write_match.group(2).upper()
+            file_to_structures[file_name].add(structure_name)
+
+        for read_match in _READ_FILE_RE.finditer(line):
+            file_name = read_match.group(1).upper()
+            structure_name = read_match.group(2).upper()
+            file_to_structures[file_name].add(structure_name)
+
+        alias_match = _BASED_ADDR_RE.search(line)
+        if alias_match:
+            alias_name = alias_match.group(1).upper()
+            base_name = alias_match.group(2).upper()
+            aliases_by_base[base_name].add(alias_name)
+
+    # FFAC3A uses BASED area WTFAC and is not read through INTO syntax.
+    file_to_structures.setdefault("FFAC3A", set()).add("WTFAC")
+
+    profiles: dict[tuple[str, str], FlowProfile] = {}
+    for file_name, (flow_type, description) in sorted(declarations.items()):
+        mapped_structures = set(file_to_structures.get(file_name, set()))
+        expanded_structures = set(mapped_structures)
+        for structure_name in mapped_structures:
+            expanded_structures.update(aliases_by_base.get(structure_name, set()))
+        structures = tuple(sorted(expanded_structures))
+        invoice_mode = any(name.startswith("DEMAT_") or name.startswith("STO_D_") for name in structures)
+        if file_name in {"FICDEMA", "FICSTOD"}:
+            invoice_mode = True
+
+        structure_prefixes: tuple[str, ...] = ()
+        structure_names: tuple[str, ...] = structures
+        preserve_structure_names = True
+        apply_idil_rules = False
+        strict_length_validation = False
+        supports_pdf = False
+        role_label = _infer_role_label(file_name=file_name, description=description, structures=structures)
+        view_mode = "generic"
+
+        if invoice_mode:
+            prefixes: list[str] = []
+            if file_name == "FICDEMA" or any(name.startswith("DEMAT_") for name in structures):
+                prefixes.append("DEMAT_")
+            if file_name == "FICSTOD" or any(name.startswith("STO_D_") for name in structures):
+                prefixes.append("STO_D_")
+            structure_prefixes = tuple(prefixes)
+            structure_names = ()
+            preserve_structure_names = False
+            apply_idil_rules = True
+            strict_length_validation = True
+            supports_pdf = True
+            role_label = "facturation"
+            view_mode = "invoice"
+
+        supports_processing = bool(structure_prefixes or structure_names)
+        if supports_processing:
+            supports_processing = _contract_can_be_built(
+                strict_length_validation=strict_length_validation,
+                structure_prefixes=structure_prefixes,
+                structure_names=structure_names,
+                preserve_structure_names=preserve_structure_names,
+                apply_idil_rules=apply_idil_rules,
+            )
+
+        profiles[(flow_type, file_name)] = FlowProfile(
+            flow_type=flow_type,
+            file_name=file_name,
+            display_name=file_name,
+            description=description,
+            role_label=role_label,
+            view_mode=view_mode,
+            structure_prefixes=structure_prefixes,
+            structure_names=structure_names,
+            preserve_structure_names=preserve_structure_names,
+            apply_idil_rules=apply_idil_rules,
+            supports_pdf=supports_pdf,
+            supports_processing=supports_processing,
+            strict_length_validation=strict_length_validation,
+            raw_structures=structures,
+        )
+
+    return profiles
+
+
+def _get_flow_profiles() -> dict[tuple[str, str], FlowProfile]:
+    global _FLOW_PROFILES_CACHE
+    with _FLOW_PROFILES_LOCK:
+        if _FLOW_PROFILES_CACHE is None:
+            _FLOW_PROFILES_CACHE = _discover_flow_profiles()
+        return _FLOW_PROFILES_CACHE
+
+
 def _normalize_flow_type(flow_type: str | None) -> str:
     return (flow_type or "").strip().lower()
 
@@ -231,10 +420,11 @@ def _normalize_file_name(file_name: str | None) -> str:
 def _resolve_profile(flow_type: str, file_name: str) -> FlowProfile:
     normalized_flow = _normalize_flow_type(flow_type)
     normalized_file = _normalize_file_name(file_name)
-    profile = _FLOW_PROFILES.get((normalized_flow, normalized_file))
+    profiles = _get_flow_profiles()
+    profile = profiles.get((normalized_flow, normalized_file))
     if profile is None:
         allowed = ", ".join(
-            f"{profile.flow_type}/{profile.file_name}" for profile in _FLOW_PROFILES.values()
+            f"{profile.flow_type}/{profile.file_name}" for profile in profiles.values()
         )
         raise HTTPException(
             status_code=400,
@@ -286,6 +476,10 @@ def _process_job(job_id: str, input_path: Path, profile: FlowProfile) -> None:
     try:
         if not SOURCE_PATH.exists():
             raise FileNotFoundError(f"Source programme introuvable: {SOURCE_PATH}")
+        if not profile.supports_processing:
+            raise ValueError(
+                f"Aucune structure exploitable detectee pour {profile.file_name} dans IDP470RA."
+            )
 
         _set_job(job_id, status="running", progress=10, message="Extraction du contrat en cours")
         contract = _get_contract(profile)
@@ -356,6 +550,7 @@ def _process_job(job_id: str, input_path: Path, profile: FlowProfile) -> None:
             "issues_count": len(issues),
             "records_count": len(records),
         }
+        kpis = _build_kpis(profile=profile, records=records, issues=issues, contract=contract)
 
         _set_job(
             job_id,
@@ -364,6 +559,7 @@ def _process_job(job_id: str, input_path: Path, profile: FlowProfile) -> None:
             message="Extraction terminee avec succes",
             warnings=warnings,
             metrics=metrics,
+            kpis=kpis,
             outputs=outputs,
         )
     except Exception as error:  # noqa: BLE001
@@ -384,12 +580,16 @@ class JobCreateResponse(BaseModel):
     message: str
     flow_type: str
     file_name: str
+    view_mode: str
+    role_label: str
 
 
 class JobStatusResponse(BaseModel):
     job_id: str
     flow_type: str
     file_name: str
+    view_mode: str
+    role_label: str
     status: str
     progress: int = Field(ge=0, le=100)
     message: str
@@ -399,6 +599,7 @@ class JobStatusResponse(BaseModel):
     error: str | None = None
     warnings: list[str] = Field(default_factory=list)
     metrics: dict[str, int] = Field(default_factory=dict)
+    kpis: list[dict[str, Any]] = Field(default_factory=list)
     downloads: dict[str, str] = Field(default_factory=dict)
 
 
@@ -407,6 +608,11 @@ class CatalogProfileResponse(BaseModel):
     file_name: str
     display_name: str
     description: str
+    role_label: str
+    view_mode: str
+    supports_processing: bool
+    supports_pdf: bool
+    raw_structures: list[str] = Field(default_factory=list)
 
 
 class CatalogResponse(BaseModel):
@@ -436,6 +642,8 @@ def _to_status_response(job_id: str, job: JobState) -> JobStatusResponse:
         job_id=job_id,
         flow_type=job.flow_type,
         file_name=job.file_name,
+        view_mode=job.view_mode,
+        role_label=job.role_label,
         status=job.status,
         progress=job.progress,
         message=job.message,
@@ -445,6 +653,7 @@ def _to_status_response(job_id: str, job: JobState) -> JobStatusResponse:
         error=job.error,
         warnings=job.warnings,
         metrics=job.metrics,
+        kpis=job.kpis,
         downloads=_download_links(job_id, job),
     )
 
@@ -474,19 +683,33 @@ def health() -> dict[str, str]:
 
 @app.get("/api/catalog", response_model=CatalogResponse)
 def catalog() -> CatalogResponse:
+    profiles_map = _get_flow_profiles()
     profiles = [
         CatalogProfileResponse(
             flow_type=profile.flow_type,
             file_name=profile.file_name,
             display_name=profile.display_name,
             description=profile.description,
+            role_label=profile.role_label,
+            view_mode=profile.view_mode,
+            supports_processing=profile.supports_processing,
+            supports_pdf=profile.supports_pdf,
+            raw_structures=list(profile.raw_structures),
         )
-        for profile in sorted(_FLOW_PROFILES.values(), key=lambda item: (item.flow_type, item.file_name))
+        for profile in sorted(profiles_map.values(), key=lambda item: (item.flow_type, item.file_name))
     ]
+    default_profile = profiles_map.get(("output", "FICDEMA"))
+    if default_profile is None and profiles:
+        first = profiles[0]
+        default_flow_type = first.flow_type
+        default_file_name = first.file_name
+    else:
+        default_flow_type = default_profile.flow_type if default_profile else "output"
+        default_file_name = default_profile.file_name if default_profile else "FICDEMA"
     return CatalogResponse(
         source_program="IDP470RA",
-        default_flow_type="output",
-        default_file_name="FICDEMA",
+        default_flow_type=default_flow_type,
+        default_file_name=default_file_name,
         profiles=profiles,
     )
 
@@ -500,6 +723,14 @@ async def create_job(
     file_name: str = Form(default="FICDEMA"),
 ) -> JobCreateResponse:
     profile = _resolve_profile(flow_type=flow_type, file_name=file_name)
+    if not profile.supports_processing:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Le fichier {profile.file_name} est detecte dans IDP470RA mais aucun mapping "
+                "structurel exploitable n'a ete trouve."
+            ),
+        )
     uploaded_file = data_file or facdema_file
 
     if uploaded_file is None or not uploaded_file.filename:
@@ -526,6 +757,8 @@ async def create_job(
             input_filename=safe_name,
             flow_type=profile.flow_type,
             file_name=profile.file_name,
+            view_mode=profile.view_mode,
+            role_label=profile.role_label,
         )
 
     background_tasks.add_task(_process_job, job_id, input_path, profile)
@@ -535,6 +768,8 @@ async def create_job(
         message="Traitement lance",
         flow_type=profile.flow_type,
         file_name=profile.file_name,
+        view_mode=profile.view_mode,
+        role_label=profile.role_label,
     )
 
 

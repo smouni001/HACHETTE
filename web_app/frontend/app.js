@@ -2,6 +2,7 @@ const form = document.getElementById("jobForm");
 const flowTypeSelect = document.getElementById("flowType");
 const fileNameSelect = document.getElementById("fileName");
 const dataFileLabel = document.getElementById("dataFileLabel");
+const profileContext = document.getElementById("profileContext");
 const fileInput = document.getElementById("dataFile");
 const launchBtn = document.getElementById("launchBtn");
 const errorBox = document.getElementById("errorBox");
@@ -17,9 +18,12 @@ const progressValue = document.getElementById("progressValue");
 const progressBar = document.getElementById("progressBar");
 const progressWrap = document.getElementById("progressWrap");
 
-const clientCount = document.getElementById("clientCount");
-const invoiceCount = document.getElementById("invoiceCount");
-const lineCount = document.getElementById("lineCount");
+const kpiLabel1 = document.getElementById("kpiLabel1");
+const kpiLabel2 = document.getElementById("kpiLabel2");
+const kpiLabel3 = document.getElementById("kpiLabel3");
+const kpiValue1 = document.getElementById("kpiValue1");
+const kpiValue2 = document.getElementById("kpiValue2");
+const kpiValue3 = document.getElementById("kpiValue3");
 
 const downloadExcel = document.getElementById("downloadExcel");
 const downloadPdfFactures = document.getElementById("downloadPdfFactures");
@@ -43,18 +47,33 @@ function fallbackCatalog() {
       file_name: "FICDEMA",
       display_name: "FICDEMA",
       description: "Flux output facture dematerialisee.",
+      role_label: "facturation",
+      view_mode: "invoice",
+      supports_processing: true,
+      supports_pdf: true,
+      raw_structures: ["DEMAT_FIC", "DEMAT_ENT", "DEMAT_LIG", "DEMAT_PIE"],
     },
     {
       flow_type: "output",
       file_name: "FICSTOD",
       display_name: "FICSTOD",
       description: "Flux output stock facture dematerialisee.",
+      role_label: "facturation",
+      view_mode: "invoice",
+      supports_processing: true,
+      supports_pdf: true,
+      raw_structures: ["STO_D_FIC", "STO_D_ENT", "STO_D_LIG", "STO_D_PIE"],
     },
     {
       flow_type: "input",
       file_name: "FFAC3A",
       display_name: "FFAC3A",
       description: "Flux input source a facturer.",
+      role_label: "facturation",
+      view_mode: "generic",
+      supports_processing: true,
+      supports_pdf: false,
+      raw_structures: ["WTFAC"],
     },
   ];
 }
@@ -109,10 +128,7 @@ function normalizeProgress(statusKey, rawProgress) {
     value = 0;
   }
 
-  if (statusKey === "completed") {
-    return 100;
-  }
-  if (statusKey === "failed") {
+  if (statusKey === "completed" || statusKey === "failed") {
     return 100;
   }
   if (statusKey === "running" && value <= 0) {
@@ -137,18 +153,81 @@ function toLocalDateTime(value) {
 
 function setStatusVisual(statusKey, label) {
   const config = STATUS_CONFIG[statusKey] || { label: label || "-", badgeClass: "is-queued" };
-  if (statusValue) {
-    statusValue.textContent = config.label;
+  statusValue.textContent = config.label;
+  statusBadge.textContent = config.label;
+  statusBadge.className = `status-badge ${config.badgeClass}`;
+  statusPanel.dataset.state = statusKey || "queued";
+  progressWrap.setAttribute("aria-label", `Progression ${config.label}`);
+}
+
+function formatModeLabel(mode) {
+  return String(mode || "").toLowerCase() === "invoice" ? "Facture" : "Hors facture";
+}
+
+function firstStructures(profile) {
+  const values = Array.isArray(profile?.raw_structures) ? profile.raw_structures : [];
+  if (values.length === 0) {
+    return "Aucune";
   }
-  if (statusBadge) {
-    statusBadge.textContent = config.label;
-    statusBadge.className = `status-badge ${config.badgeClass}`;
+  if (values.length <= 4) {
+    return values.join(", ");
   }
-  if (statusPanel) {
-    statusPanel.dataset.state = statusKey || "queued";
+  return `${values.slice(0, 4).join(", ")} ... (+${values.length - 4})`;
+}
+
+function renderProfileContext(profile) {
+  if (!profile) {
+    profileContext.textContent = "";
+    return;
   }
-  if (progressWrap) {
-    progressWrap.setAttribute("aria-label", `Progression ${config.label}`);
+  const statusText = profile.supports_processing ? "Mapping actif" : "Mapping non detecte";
+  profileContext.textContent = `Role: ${profile.role_label || "metier"} | Mode: ${formatModeLabel(profile.view_mode)} | ${statusText} | Structures: ${firstStructures(profile)}`;
+}
+
+function setKpiCards(kpis) {
+  const safe = Array.isArray(kpis) ? kpis.slice(0, 3) : [];
+  const padded = [
+    safe[0] || { label: "Indicateur 1", value: 0 },
+    safe[1] || { label: "Indicateur 2", value: 0 },
+    safe[2] || { label: "Indicateur 3", value: 0 },
+  ];
+
+  kpiLabel1.textContent = padded[0].label || "Indicateur 1";
+  kpiLabel2.textContent = padded[1].label || "Indicateur 2";
+  kpiLabel3.textContent = padded[2].label || "Indicateur 3";
+  setMetricValue(kpiValue1, Number(padded[0].value || 0));
+  setMetricValue(kpiValue2, Number(padded[1].value || 0));
+  setMetricValue(kpiValue3, Number(padded[2].value || 0));
+}
+
+function resetKpisForProfile(profile) {
+  if (profile?.view_mode === "invoice") {
+    setKpiCards([
+      { label: "Clients", value: 0 },
+      { label: "Factures", value: 0 },
+      { label: "Lignes fichier", value: 0 },
+    ]);
+    return;
+  }
+  setKpiCards([
+    { label: "Enregistrements", value: 0 },
+    { label: "Types detectes", value: 0 },
+    { label: "Champs structures", value: 0 },
+  ]);
+}
+
+function updateDownloadMode(profile, downloads = null) {
+  setDownload(downloadExcel, downloads?.excel || null);
+  if (profile?.supports_pdf) {
+    downloadPdfFactures.style.display = "";
+    downloadPdfSynthese.style.display = "";
+    setDownload(downloadPdfFactures, downloads?.pdf_factures || null);
+    setDownload(downloadPdfSynthese, downloads?.pdf_synthese || null);
+  } else {
+    downloadPdfFactures.style.display = "none";
+    downloadPdfSynthese.style.display = "none";
+    setDownload(downloadPdfFactures, null);
+    setDownload(downloadPdfSynthese, null);
   }
 }
 
@@ -160,24 +239,18 @@ function applyStatus(payload) {
   jobIdValue.textContent = payload.job_id || "-";
   setStatusVisual(safeStatus, payload.status || "-");
   messageValue.textContent = payload.message || "-";
-  if (updatedAtValue) {
-    updatedAtValue.textContent = `Derniere mise a jour: ${toLocalDateTime(payload.updated_at)}`;
-  }
+  updatedAtValue.textContent = `Derniere mise a jour: ${toLocalDateTime(payload.updated_at)}`;
   progressBar.style.width = `${progress}%`;
-  if (progressValue) {
-    progressValue.textContent = `${progress}%`;
-  }
+  progressValue.textContent = `${progress}%`;
 
-  const metrics = payload.metrics || {};
-  setMetricValue(clientCount, metrics.client_count || 0);
-  setMetricValue(invoiceCount, metrics.invoice_count || 0);
-  setMetricValue(lineCount, metrics.line_count || 0);
   setWarnings(payload.warnings || []);
-
-  const downloads = payload.downloads || {};
-  setDownload(downloadExcel, downloads.excel);
-  setDownload(downloadPdfFactures, downloads.pdf_factures);
-  setDownload(downloadPdfSynthese, downloads.pdf_synthese);
+  setKpiCards(payload.kpis || []);
+  updateDownloadMode(
+    {
+      supports_pdf: (payload.view_mode || "generic") === "invoice",
+    },
+    payload.downloads || {},
+  );
 }
 
 async function fetchStatus(jobId) {
@@ -240,13 +313,33 @@ function updateUploadLabel() {
   const profile = selectedProfile();
   if (!profile) {
     dataFileLabel.textContent = "Charger le fichier (obligatoire)";
+    renderProfileContext(null);
+    launchBtn.disabled = true;
     return;
   }
+
   dataFileLabel.textContent = `Charger le fichier ${profile.file_name} (obligatoire)`;
+  renderProfileContext(profile);
+  resetKpisForProfile(profile);
+  updateDownloadMode(profile);
+  launchBtn.disabled = !profile.supports_processing;
+  if (!profile.supports_processing) {
+    setError(
+      `Le fichier ${profile.file_name} est detecte, mais aucun mapping structurel exploitable n'a ete trouve.`,
+    );
+  } else {
+    setError("");
+  }
 }
 
 function labelForFlowType(flowType) {
   return String(flowType || "").toLowerCase() === "input" ? "Input" : "Output";
+}
+
+function optionTitle(profile) {
+  const mode = formatModeLabel(profile.view_mode);
+  const role = profile.role_label || "metier";
+  return `${profile.description || ""} | Role: ${role} | Mode: ${mode}`;
 }
 
 function rebuildFileOptions(targetFileName = null) {
@@ -259,8 +352,9 @@ function rebuildFileOptions(targetFileName = null) {
   availableProfiles.forEach((profile) => {
     const option = document.createElement("option");
     option.value = profile.file_name;
-    option.textContent = profile.display_name || profile.file_name;
-    option.title = profile.description || "";
+    const suffix = profile.supports_processing ? "" : " (non mappe)";
+    option.textContent = `${profile.display_name || profile.file_name}${suffix}`;
+    option.title = optionTitle(profile);
     fileNameSelect.appendChild(option);
   });
 
@@ -293,12 +387,7 @@ function loadFlowOptions(defaultFlowType = "output", defaultFileName = "FICDEMA"
   if (flowTypes.length === 0) {
     return;
   }
-
-  if (flowTypes.includes(defaultFlowType)) {
-    flowTypeSelect.value = defaultFlowType;
-  } else {
-    flowTypeSelect.value = flowTypes[0];
-  }
+  flowTypeSelect.value = flowTypes.includes(defaultFlowType) ? defaultFlowType : flowTypes[0];
   rebuildFileOptions(defaultFileName);
 }
 
@@ -346,6 +435,10 @@ form.addEventListener("submit", async (event) => {
     setError("Selection flux/fichier invalide.");
     return;
   }
+  if (!profile.supports_processing) {
+    setError(`Le fichier ${profile.file_name} n'est pas encore exploitable automatiquement.`);
+    return;
+  }
   if (!file) {
     setError(`Chargez le fichier ${profile.file_name} avant de lancer le traitement.`);
     return;
@@ -373,19 +466,11 @@ form.addEventListener("submit", async (event) => {
     jobIdValue.textContent = activeJobId;
     setStatusVisual("queued", payload.status);
     messageValue.textContent = payload.message;
-    if (updatedAtValue) {
-      updatedAtValue.textContent = "Derniere mise a jour: -";
-    }
+    updatedAtValue.textContent = "Derniere mise a jour: -";
     progressBar.style.width = "2%";
-    if (progressValue) {
-      progressValue.textContent = "2%";
-    }
-    setMetricValue(clientCount, 0);
-    setMetricValue(invoiceCount, 0);
-    setMetricValue(lineCount, 0);
-    setDownload(downloadExcel, null);
-    setDownload(downloadPdfFactures, null);
-    setDownload(downloadPdfSynthese, null);
+    progressValue.textContent = "2%";
+    resetKpisForProfile(profile);
+    updateDownloadMode(profile);
 
     startPolling(activeJobId);
   } catch (error) {

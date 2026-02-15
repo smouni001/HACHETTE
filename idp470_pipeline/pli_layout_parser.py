@@ -249,6 +249,20 @@ def _build_record_specs_from_text(
             current_fields = []
             current_group_fields = {}
             current_position = 0
+            inline_remainder = line[start_match.end() :]
+            inline_type = _parse_decl_type(inline_remainder)
+            if inline_type is not None and inline_type.length > 0:
+                header_field = FieldSpec(
+                    name="VALUE",
+                    start=1,
+                    length=inline_type.length,
+                    type=inline_type.field_type,
+                    decimals=inline_type.decimals,
+                    description=None,
+                )
+                current_fields.append(header_field)
+                current_group_fields.setdefault("__ROOT__", []).append(header_field)
+                current_position = inline_type.length
             continue
 
         if current_structure is None:
@@ -264,6 +278,20 @@ def _build_record_specs_from_text(
             current_fields = []
             current_group_fields = {}
             current_position = 0
+            inline_remainder = line[boundary_match.end() :]
+            inline_type = _parse_decl_type(inline_remainder)
+            if inline_type is not None and inline_type.length > 0:
+                header_field = FieldSpec(
+                    name="VALUE",
+                    start=1,
+                    length=inline_type.length,
+                    type=inline_type.field_type,
+                    decimals=inline_type.decimals,
+                    description=None,
+                )
+                current_fields.append(header_field)
+                current_group_fields.setdefault("__ROOT__", []).append(header_field)
+                current_position = inline_type.length
             continue
 
         field_match = _FIELD_RE.match(line)
@@ -304,8 +332,16 @@ def _build_record_specs_from_text(
             continue
 
         top_level_group = next((group for group in stack if group.level == 10), None)
-        if top_level_group is None or top_level_group.name == "ID":
-            continue
+        top_level_group_name: str | None = None
+        if top_level_group is not None:
+            if top_level_group.name == "ID":
+                continue
+            top_level_group_name = top_level_group.name
+        elif stack:
+            first_group = stack[0]
+            if first_group.name == "ID":
+                continue
+            top_level_group_name = first_group.name
 
         if parsed_type.length == 0:
             continue
@@ -340,7 +376,8 @@ def _build_record_specs_from_text(
             description=field_description,
         )
         current_fields.append(new_field)
-        current_group_fields.setdefault(top_level_group.name, []).append(new_field)
+        group_bucket = top_level_group_name or "__ROOT__"
+        current_group_fields.setdefault(group_bucket, []).append(new_field)
 
     flush_current()
     return list(records_by_name.values())

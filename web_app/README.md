@@ -49,18 +49,38 @@ Puis ouvrir:
 ## 4) API principale
 
 - `GET /api/health`
-- `GET /api/catalog` (liste des flux/fichiers disponibles)
+- `GET /api/catalog` (liste dynamique des flux/fichiers detectes dans `IDP470RA`)
 - `POST /api/jobs` (form-data: `flow_type`, `file_name`, `data_file`)
 - `GET /api/jobs/{job_id}`
 - `GET /api/jobs/{job_id}/download/excel`
 - `GET /api/jobs/{job_id}/download/pdf-factures`
 - `GET /api/jobs/{job_id}/download/pdf-synthese`
 
-Profils disponibles par defaut:
+Le catalogue retourne pour chaque fichier:
 
-- `output / FICDEMA` (layout `DEMAT_*`)
-- `output / FICSTOD` (layout `STO_D_*`)
-- `input / FFAC3A` (layout `WTFAC`)
+- type de flux (`input`/`output`)
+- nom de fichier logique
+- role metier detecte
+- mode d'affichage (`invoice` ou `generic`)
+- etat du mapping (`supports_processing`)
+- structures IDP470RA associees (`raw_structures`)
+
+## 4.1) Logique de switch conditionnel
+
+Le backend applique automatiquement un switch metier:
+
+1. Si le fichier est de type facture (`DEMAT_*` ou `STO_D_*`):
+   - mode `invoice`
+   - regles de structure IDIL actives
+   - KPI facture (Clients, Factures, Lignes fichier)
+   - generation Excel + PDF
+2. Sinon:
+   - mode `generic`
+   - mapping flexible base sur les structures detectees dans IDP470RA
+   - KPI generiques (Enregistrements, Types detectes, Champs structures)
+   - generation Excel (PDF masque)
+
+Pour les fichiers non mappables automatiquement, le catalogue les expose avec `supports_processing=false`.
 
 ## 5) Hebergement AWS (ECS Fargate)
 
