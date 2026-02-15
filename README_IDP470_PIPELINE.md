@@ -119,6 +119,11 @@ Sorties:
 streamlit run streamlit_app.py
 ```
 
+Pour masquer la barre superieure:
+
+1. Config locale: `.streamlit/config.toml` (deja fourni)
+2. En production Streamlit Cloud: utiliser aussi l'URL `?embed=true`
+
 Configuration interne:
 
 - `config/ui_settings.toml`

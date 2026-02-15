@@ -213,6 +213,18 @@ def _apply_theme() -> None:
         [data-testid="stDataFrame"] div {
           font-size: 0.92rem;
         }
+        header[data-testid="stHeader"] {
+          display: none;
+        }
+        [data-testid="stToolbar"] {
+          display: none;
+        }
+        [data-testid="stDecoration"] {
+          display: none;
+        }
+        [data-testid="stStatusWidget"] {
+          display: none;
+        }
         </style>
         """,
         unsafe_allow_html=True,
