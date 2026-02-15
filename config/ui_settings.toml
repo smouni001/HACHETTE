@@ -1,0 +1,15 @@
+[pipeline]
+provider = "deterministic"
+model = ""
+temperature = 0.0
+source_encoding = "latin-1"
+input_encoding = "latin-1"
+fallback_deterministic = true
+strict_length_validation = true
+continue_on_error = false
+default_source_path = "IDP470RA.pli"
+default_spec_pdf_path = "2785 - DOCTECHN - Dilifac - Format IDIL.pdf"
+default_input_path = "facdemat_20251021_nufac29501954.txt"
+default_logo_path = "assets/logo_hachette_livre.png"
+app_title = "IDIL PAPYRUS FACTURE DEMAT"
+app_subtitle = "Extraction Mainframe vers Excel/PDF"

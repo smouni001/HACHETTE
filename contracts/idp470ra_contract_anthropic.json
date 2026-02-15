@@ -1,0 +1,1797 @@
+{
+  "schema_version": "1.0",
+  "source_program": "IDP470RA",
+  "generated_at_utc": "2026-02-14T14:23:59Z",
+  "line_length": 1200,
+  "strict_length_validation": true,
+  "record_types": [
+    {
+      "name": "FIC",
+      "selector": {
+        "start": 1,
+        "length": 3,
+        "value": "FIC"
+      },
+      "fields": [
+        {
+          "name": "TYPEN",
+          "start": 1,
+          "length": 3,
+          "type": "string",
+          "decimals": null,
+          "description": null
+        },
+        {
+          "name": "NULOT",
+          "start": 4,
+          "length": 14,
+          "type": "string",
+          "decimals": null,
+          "description": null
+        },
+        {
+          "name": "DTCRE",
+          "start": 18,
+          "length": 8,
+          "type": "string",
+          "decimals": null,
+          "description": null
+        },
+        {
+          "name": "HHCRE",
+          "start": 26,
+          "length": 6,
+          "type": "string",
+          "decimals": null,
+          "description": null
+        },
+        {
+          "name": "NBFAC",
+          "start": 32,
+          "length": 7,
+          "type": "integer",
+          "decimals": null,
+          "description": null
+        },
+        {
+          "name": "FILRE",
+          "start": 39,
+          "length": 1162,
+          "type": "string",
+          "decimals": null,
+          "description": null
+        }
+      ]
+    },
+    {
+      "name": "ENT",
+      "selector": {
+        "start": 1,
+        "length": 3,
+        "value": "ENT"
+      },
+      "fields": [
+        {
+          "name": "TYPEN",
+          "start": 1,
+          "length": 3,
+          "type": "string",
+          "decimals": null,
+          "description": null
+        },
+        {
+          "name": "NULOT",
+          "start": 4,
+          "length": 14,
+          "type": "string",
+          "decimals": null,
+          "description": null
+        },
+        {
+          "name": "EANFO",
+          "start": 18,
+          "length": 13,
+          "type": "string",
+          "decimals": null,
+          "description": null
+        },
+        {
+          "name": "NUFAC",
+          "start": 31,
+          "length": 15,
+          "type": "string",
+          "decimals": null,
+          "description": null
+        },
+        {
+          "name": "TYPFA",
+          "start": 46,
+          "length": 3,
+          "type": "string",
+          "decimals": null,
+          "description": null
+        },
+        {
+          "name": "SMONHT",
+          "start": 49,
+          "length": 1,
+          "type": "string",
+          "decimals": null,
+          "description": null
+        },
+        {
+          "name": "MONHT",
+          "start": 50,
+          "length": 14,
+          "type": "decimal",
+          "decimals": 5,
+          "description": null
+        },
+        {
+          "name": "SMTTTC",
+          "start": 64,
+          "length": 1,
+          "type": "string",
+          "decimals": null,
+          "description": null
+        },
+        {
+          "name": "MTTTC",
+          "start": 65,
+          "length": 14,
+          "type": "decimal",
+          "decimals": 5,
+          "description": null
+        },
+        {
+          "name": "SMTTVA",
+          "start": 79,
+          "length": 1,
+          "type": "string",
+          "decimals": null,
+          "description": null
+        },
+        {
+          "name": "MTTVA",
+          "start": 80,
+          "length": 14,
+          "type": "decimal",
+          "decimals": 5,
+          "description": null
+        },
+        {
+          "name": "SMTEMB",
+          "start": 94,
+          "length": 1,
+          "type": "string",
+          "decimals": null,
+          "description": null
+        },
+        {
+          "name": "MTEMB",
+          "start": 95,
+          "length": 14,
+          "type": "decimal",
+          "decimals": 5,
+          "description": null
+        },
+        {
+          "name": "SMTFRA",
+          "start": 109,
+          "length": 1,
+          "type": "string",
+          "decimals": null,
+          "description": null
+        },
+        {
+          "name": "MTFRA",
+          "start": 110,
+          "length": 14,
+          "type": "decimal",
+          "decimals": 5,
+          "description": null
+        },
+        {
+          "name": "DEVIS",
+          "start": 124,
+          "length": 3,
+          "type": "string",
+          "decimals": null,
+          "description": null
+        },
+        {
+          "name": "DAFAC",
+          "start": 127,
+          "length": 8,
+          "type": "string",
+          "decimals": null,
+          "description": null
+        },
+        {
+          "name": "DAECH",
+          "start": 135,
+          "length": 8,
+          "type": "string",
+          "decimals": null,
+          "description": null
+        },
+        {
+          "name": "NBLFA",
+          "start": 143,
+          "length": 7,
+          "type": "integer",
+          "decimals": null,
+          "description": null
+        },
+        {
+          "name": "DAINS",
+          "start": 150,
+          "length": 8,
+          "type": "string",
+          "decimals": null,
+          "description": null
+        },
+        {
+          "name": "HEINS",
+          "start": 158,
+          "length": 6,
+          "type": "string",
+          "decimals": null,
+          "description": null
+        },
+        {
+          "name": "NBECH",
+          "start": 164,
+          "length": 5,
+          "type": "integer",
+          "decimals": null,
+          "description": null
+        },
+        {
+          "name": "SMTTRA",
+          "start": 169,
+          "length": 1,
+          "type": "string",
+          "decimals": null,
+          "description": null
+        },
+        {
+          "name": "MTTRA",
+          "start": 170,
+          "length": 14,
+          "type": "decimal",
+          "decimals": 5,
+          "description": null
+        },
+        {
+          "name": "CDFON",
+          "start": 184,
+          "length": 2,
+          "type": "string",
+          "decimals": null,
+          "description": null
+        },
+        {
+          "name": "CDORR",
+          "start": 186,
+          "length": 1,
+          "type": "string",
+          "decimals": null,
+          "description": null
+        },
+        {
+          "name": "SMTAFR",
+          "start": 187,
+          "length": 1,
+          "type": "string",
+          "decimals": null,
+          "description": null
+        },
+        {
+          "name": "MTAFR",
+          "start": 188,
+          "length": 14,
+          "type": "decimal",
+          "decimals": 5,
+          "description": null
+        },
+        {
+          "name": "NUCLI",
+          "start": 202,
+          "length": 6,
+          "type": "string",
+          "decimals": null,
+          "description": null
+        },
+        {
+          "name": "TXTVT",
+          "start": 208,
+          "length": 5,
+          "type": "decimal",
+          "decimals": 2,
+          "description": null
+        },
+        {
+          "name": "TXTVE",
+          "start": 213,
+          "length": 5,
+          "type": "decimal",
+          "decimals": 2,
+          "description": null
+        },
+        {
+          "name": "TXTVF",
+          "start": 218,
+          "length": 5,
+          "type": "decimal",
+          "decimals": 2,
+          "description": null
+        },
+        {
+          "name": "SMTFHT",
+          "start": 223,
+          "length": 1,
+          "type": "string",
+          "decimals": null,
+          "description": null
+        },
+        {
+          "name": "MTFHT",
+          "start": 224,
+          "length": 14,
+          "type": "decimal",
+          "decimals": 5,
+          "description": null
+        },
+        {
+          "name": "COPAE",
+          "start": 238,
+          "length": 2,
+          "type": "string",
+          "decimals": null,
+          "description": null
+        },
+        {
+          "name": "NUFAO",
+          "start": 240,
+          "length": 15,
+          "type": "string",
+          "decimals": null,
+          "description": null
+        },
+        {
+          "name": "NUBLO",
+          "start": 255,
+          "length": 13,
+          "type": "string",
+          "decimals": null,
+          "description": null
+        },
+        {
+          "name": "FILXX",
+          "start": 268,
+          "length": 933,
+          "type": "string",
+          "decimals": null,
+          "description": null
+        }
+      ]
+    },
+    {
+      "name": "ECH",
+      "selector": {
+        "start": 1,
+        "length": 3,
+        "value": "ECH"
+      },
+      "fields": [
+        {
+          "name": "TYPEN",
+          "start": 1,
+          "length": 3,
+          "type": "string",
+          "decimals": null,
+          "description": null
+        },
+        {
+          "name": "NULOT",
+          "start": 4,
+          "length": 14,
+          "type": "string",
+          "decimals": null,
+          "description": null
+        },
+        {
+          "name": "EANFO",
+          "start": 18,
+          "length": 13,
+          "type": "string",
+          "decimals": null,
+          "description": null
+        },
+        {
+          "name": "NUFAC",
+          "start": 31,
+          "length": 15,
+          "type": "string",
+          "decimals": null,
+          "description": null
+        },
+        {
+          "name": "DTECH",
+          "start": 46,
+          "length": 8,
+          "type": "string",
+          "decimals": null,
+          "description": null
+        },
+        {
+          "name": "SMTECH",
+          "start": 54,
+          "length": 1,
+          "type": "string",
+          "decimals": null,
+          "description": null
+        },
+        {
+          "name": "MTECH",
+          "start": 55,
+          "length": 14,
+          "type": "decimal",
+          "decimals": 5,
+          "description": null
+        },
+        {
+          "name": "FILRE",
+          "start": 69,
+          "length": 1132,
+          "type": "string",
+          "decimals": null,
+          "description": null
+        }
+      ]
+    },
+    {
+      "name": "COM",
+      "selector": {
+        "start": 1,
+        "length": 3,
+        "value": "COM"
+      },
+      "fields": [
+        {
+          "name": "TYPEN",
+          "start": 1,
+          "length": 3,
+          "type": "string",
+          "decimals": null,
+          "description": null
+        },
+        {
+          "name": "NULOT",
+          "start": 4,
+          "length": 14,
+          "type": "string",
+          "decimals": null,
+          "description": null
+        },
+        {
+          "name": "EANFO",
+          "start": 18,
+          "length": 13,
+          "type": "string",
+          "decimals": null,
+          "description": null
+        },
+        {
+          "name": "NUFAC",
+          "start": 31,
+          "length": 15,
+          "type": "string",
+          "decimals": null,
+          "description": null
+        },
+        {
+          "name": "TYPCO",
+          "start": 46,
+          "length": 3,
+          "type": "string",
+          "decimals": null,
+          "description": null
+        },
+        {
+          "name": "ZOCOM",
+          "start": 49,
+          "length": 70,
+          "type": "string",
+          "decimals": null,
+          "description": null
+        },
+        {
+          "name": "FILRE",
+          "start": 119,
+          "length": 1082,
+          "type": "string",
+          "decimals": null,
+          "description": null
+        }
+      ]
+    },
+    {
+      "name": "REF",
+      "selector": {
+        "start": 1,
+        "length": 3,
+        "value": "REF"
+      },
+      "fields": [
+        {
+          "name": "TYPEN",
+          "start": 1,
+          "length": 3,
+          "type": "string",
+          "decimals": null,
+          "description": null
+        },
+        {
+          "name": "NULOT",
+          "start": 4,
+          "length": 14,
+          "type": "string",
+          "decimals": null,
+          "description": null
+        },
+        {
+          "name": "EANFO",
+          "start": 18,
+          "length": 13,
+          "type": "string",
+          "decimals": null,
+          "description": null
+        },
+        {
+          "name": "NUFAC",
+          "start": 31,
+          "length": 15,
+          "type": "string",
+          "decimals": null,
+          "description": null
+        },
+        {
+          "name": "QUALI",
+          "start": 46,
+          "length": 3,
+          "type": "string",
+          "decimals": null,
+          "description": null
+        },
+        {
+          "name": "RFDIS",
+          "start": 49,
+          "length": 35,
+          "type": "string",
+          "decimals": null,
+          "description": null
+        },
+        {
+          "name": "DAOPE",
+          "start": 84,
+          "length": 8,
+          "type": "string",
+          "decimals": null,
+          "description": null
+        },
+        {
+          "name": "FILRE",
+          "start": 92,
+          "length": 1109,
+          "type": "string",
+          "decimals": null,
+          "description": null
+        }
+      ]
+    },
+    {
+      "name": "ADR",
+      "selector": {
+        "start": 1,
+        "length": 3,
+        "value": "ADR"
+      },
+      "fields": [
+        {
+          "name": "TYPEN",
+          "start": 1,
+          "length": 3,
+          "type": "string",
+          "decimals": null,
+          "description": null
+        },
+        {
+          "name": "NULOT",
+          "start": 4,
+          "length": 14,
+          "type": "string",
+          "decimals": null,
+          "description": null
+        },
+        {
+          "name": "EANFO",
+          "start": 18,
+          "length": 13,
+          "type": "string",
+          "decimals": null,
+          "description": null
+        },
+        {
+          "name": "NUFAC",
+          "start": 31,
+          "length": 15,
+          "type": "string",
+          "decimals": null,
+          "description": null
+        },
+        {
+          "name": "CLLIV_NUCLI",
+          "start": 46,
+          "length": 13,
+          "type": "string",
+          "decimals": null,
+          "description": null
+        },
+        {
+          "name": "CLLIV_RASOC",
+          "start": 59,
+          "length": 35,
+          "type": "string",
+          "decimals": null,
+          "description": null
+        },
+        {
+          "name": "CLLIV_NOCLI",
+          "start": 94,
+          "length": 35,
+          "type": "string",
+          "decimals": null,
+          "description": null
+        },
+        {
+          "name": "CLLIV_ADCLI",
+          "start": 129,
+          "length": 35,
+          "type": "string",
+          "decimals": null,
+          "description": null
+        },
+        {
+          "name": "CLLIV_LORES",
+          "start": 164,
+          "length": 35,
+          "type": "string",
+          "decimals": null,
+          "description": null
+        },
+        {
+          "name": "CLLIV_LOBDI",
+          "start": 199,
+          "length": 35,
+          "type": "string",
+          "decimals": null,
+          "description": null
+        },
+        {
+          "name": "CLLIV_CPCLI",
+          "start": 234,
+          "length": 9,
+          "type": "string",
+          "decimals": null,
+          "description": null
+        },
+        {
+          "name": "CLLIV_CPAYS",
+          "start": 243,
+          "length": 3,
+          "type": "string",
+          "decimals": null,
+          "description": null
+        },
+        {
+          "name": "CLFAC_CLIFA",
+          "start": 246,
+          "length": 13,
+          "type": "string",
+          "decimals": null,
+          "description": null
+        },
+        {
+          "name": "CLFAC_RASOC",
+          "start": 259,
+          "length": 35,
+          "type": "string",
+          "decimals": null,
+          "description": null
+        },
+        {
+          "name": "CLFAC_NOCLI",
+          "start": 294,
+          "length": 35,
+          "type": "string",
+          "decimals": null,
+          "description": null
+        },
+        {
+          "name": "CLFAC_ADCLI",
+          "start": 329,
+          "length": 35,
+          "type": "string",
+          "decimals": null,
+          "description": null
+        },
+        {
+          "name": "CLFAC_LORES",
+          "start": 364,
+          "length": 35,
+          "type": "string",
+          "decimals": null,
+          "description": null
+        },
+        {
+          "name": "CLFAC_LOBDI",
+          "start": 399,
+          "length": 35,
+          "type": "string",
+          "decimals": null,
+          "description": null
+        },
+        {
+          "name": "CLFAC_CPCLI",
+          "start": 434,
+          "length": 9,
+          "type": "string",
+          "decimals": null,
+          "description": null
+        },
+        {
+          "name": "CLFAC_CPAYS",
+          "start": 443,
+          "length": 3,
+          "type": "string",
+          "decimals": null,
+          "description": null
+        },
+        {
+          "name": "CLFAC_SIRFA",
+          "start": 446,
+          "length": 9,
+          "type": "string",
+          "decimals": null,
+          "description": null
+        },
+        {
+          "name": "EMETT_MACOM",
+          "start": 455,
+          "length": 13,
+          "type": "string",
+          "decimals": null,
+          "description": null
+        },
+        {
+          "name": "EMETT_NOCLI",
+          "start": 468,
+          "length": 35,
+          "type": "string",
+          "decimals": null,
+          "description": null
+        },
+        {
+          "name": "EMETT_RASOC",
+          "start": 503,
+          "length": 35,
+          "type": "string",
+          "decimals": null,
+          "description": null
+        },
+        {
+          "name": "EMETT_ADCLI",
+          "start": 538,
+          "length": 35,
+          "type": "string",
+          "decimals": null,
+          "description": null
+        },
+        {
+          "name": "EMETT_LORES",
+          "start": 573,
+          "length": 35,
+          "type": "string",
+          "decimals": null,
+          "description": null
+        },
+        {
+          "name": "EMETT_LOBDI",
+          "start": 608,
+          "length": 35,
+          "type": "string",
+          "decimals": null,
+          "description": null
+        },
+        {
+          "name": "EMETT_CPCLI",
+          "start": 643,
+          "length": 9,
+          "type": "string",
+          "decimals": null,
+          "description": null
+        },
+        {
+          "name": "EMETT_CPAYS",
+          "start": 652,
+          "length": 3,
+          "type": "string",
+          "decimals": null,
+          "description": null
+        },
+        {
+          "name": "EMETT_NUTEL",
+          "start": 655,
+          "length": 10,
+          "type": "string",
+          "decimals": null,
+          "description": null
+        },
+        {
+          "name": "EMETT_NUFAX",
+          "start": 665,
+          "length": 10,
+          "type": "string",
+          "decimals": null,
+          "description": null
+        },
+        {
+          "name": "EMETT_RECOU",
+          "start": 675,
+          "length": 10,
+          "type": "string",
+          "decimals": null,
+          "description": null
+        },
+        {
+          "name": "EMETT_SIREM",
+          "start": 685,
+          "length": 9,
+          "type": "string",
+          "decimals": null,
+          "description": null
+        },
+        {
+          "name": "SIEGE_EAN",
+          "start": 694,
+          "length": 13,
+          "type": "string",
+          "decimals": null,
+          "description": null
+        },
+        {
+          "name": "SIEGE_NOCLI",
+          "start": 707,
+          "length": 35,
+          "type": "string",
+          "decimals": null,
+          "description": null
+        },
+        {
+          "name": "SIEGE_RASOC",
+          "start": 742,
+          "length": 35,
+          "type": "string",
+          "decimals": null,
+          "description": null
+        },
+        {
+          "name": "SIEGE_ADCLI",
+          "start": 777,
+          "length": 35,
+          "type": "string",
+          "decimals": null,
+          "description": null
+        },
+        {
+          "name": "SIEGE_LORES",
+          "start": 812,
+          "length": 35,
+          "type": "string",
+          "decimals": null,
+          "description": null
+        },
+        {
+          "name": "SIEGE_LOBDI",
+          "start": 847,
+          "length": 35,
+          "type": "string",
+          "decimals": null,
+          "description": null
+        },
+        {
+          "name": "SIEGE_CPCLI",
+          "start": 882,
+          "length": 9,
+          "type": "string",
+          "decimals": null,
+          "description": null
+        },
+        {
+          "name": "SIEGE_CPAYS",
+          "start": 891,
+          "length": 3,
+          "type": "string",
+          "decimals": null,
+          "description": null
+        },
+        {
+          "name": "SIEGE_FJURI",
+          "start": 894,
+          "length": 30,
+          "type": "string",
+          "decimals": null,
+          "description": null
+        },
+        {
+          "name": "SIEGE_CAPIT",
+          "start": 924,
+          "length": 12,
+          "type": "string",
+          "decimals": null,
+          "description": null
+        },
+        {
+          "name": "SIEGE_CMONA",
+          "start": 936,
+          "length": 3,
+          "type": "string",
+          "decimals": null,
+          "description": null
+        },
+        {
+          "name": "SIEGE_RCOMM",
+          "start": 939,
+          "length": 30,
+          "type": "string",
+          "decimals": null,
+          "description": null
+        },
+        {
+          "name": "SIEGE_NUCEE",
+          "start": 969,
+          "length": 13,
+          "type": "string",
+          "decimals": null,
+          "description": null
+        },
+        {
+          "name": "SIEGE_MAGTV",
+          "start": 982,
+          "length": 13,
+          "type": "string",
+          "decimals": null,
+          "description": null
+        },
+        {
+          "name": "REGIF",
+          "start": 995,
+          "length": 30,
+          "type": "string",
+          "decimals": null,
+          "description": null
+        },
+        {
+          "name": "FILXX",
+          "start": 1025,
+          "length": 176,
+          "type": "string",
+          "decimals": null,
+          "description": null
+        }
+      ]
+    },
+    {
+      "name": "AD2",
+      "selector": {
+        "start": 1,
+        "length": 3,
+        "value": "AD2"
+      },
+      "fields": [
+        {
+          "name": "TYPEN",
+          "start": 1,
+          "length": 3,
+          "type": "string",
+          "decimals": null,
+          "description": null
+        },
+        {
+          "name": "NULOT",
+          "start": 4,
+          "length": 14,
+          "type": "string",
+          "decimals": null,
+          "description": null
+        },
+        {
+          "name": "EANFO",
+          "start": 18,
+          "length": 13,
+          "type": "string",
+          "decimals": null,
+          "description": null
+        },
+        {
+          "name": "NUFAC",
+          "start": 31,
+          "length": 15,
+          "type": "string",
+          "decimals": null,
+          "description": null
+        },
+        {
+          "name": "LIVREA_CNUD2",
+          "start": 46,
+          "length": 13,
+          "type": "string",
+          "decimals": null,
+          "description": null
+        },
+        {
+          "name": "LIVREA_RASOC",
+          "start": 59,
+          "length": 35,
+          "type": "string",
+          "decimals": null,
+          "description": null
+        },
+        {
+          "name": "LIVREA_NOCLI",
+          "start": 94,
+          "length": 35,
+          "type": "string",
+          "decimals": null,
+          "description": null
+        },
+        {
+          "name": "LIVREA_ADCLI",
+          "start": 129,
+          "length": 35,
+          "type": "string",
+          "decimals": null,
+          "description": null
+        },
+        {
+          "name": "LIVREA_LORES",
+          "start": 164,
+          "length": 35,
+          "type": "string",
+          "decimals": null,
+          "description": null
+        },
+        {
+          "name": "LIVREA_LOBDI",
+          "start": 199,
+          "length": 35,
+          "type": "string",
+          "decimals": null,
+          "description": null
+        },
+        {
+          "name": "LIVREA_CPCLI",
+          "start": 234,
+          "length": 9,
+          "type": "string",
+          "decimals": null,
+          "description": null
+        },
+        {
+          "name": "LIVREA_CPAYS",
+          "start": 243,
+          "length": 3,
+          "type": "string",
+          "decimals": null,
+          "description": null
+        },
+        {
+          "name": "LIVREA_SIREN",
+          "start": 246,
+          "length": 9,
+          "type": "string",
+          "decimals": null,
+          "description": null
+        },
+        {
+          "name": "REGLEA_CNUD6",
+          "start": 255,
+          "length": 13,
+          "type": "string",
+          "decimals": null,
+          "description": null
+        },
+        {
+          "name": "REGLEA_RASOC",
+          "start": 268,
+          "length": 35,
+          "type": "string",
+          "decimals": null,
+          "description": null
+        },
+        {
+          "name": "REGLEA_NOCLI",
+          "start": 303,
+          "length": 35,
+          "type": "string",
+          "decimals": null,
+          "description": null
+        },
+        {
+          "name": "REGLEA_ADCLI",
+          "start": 338,
+          "length": 35,
+          "type": "string",
+          "decimals": null,
+          "description": null
+        },
+        {
+          "name": "REGLEA_LORES",
+          "start": 373,
+          "length": 35,
+          "type": "string",
+          "decimals": null,
+          "description": null
+        },
+        {
+          "name": "REGLEA_LOBDI",
+          "start": 408,
+          "length": 35,
+          "type": "string",
+          "decimals": null,
+          "description": null
+        },
+        {
+          "name": "REGLEA_CPCLI",
+          "start": 443,
+          "length": 9,
+          "type": "string",
+          "decimals": null,
+          "description": null
+        },
+        {
+          "name": "REGLEA_CPAYS",
+          "start": 452,
+          "length": 3,
+          "type": "string",
+          "decimals": null,
+          "description": null
+        },
+        {
+          "name": "REGLEA_SIREN",
+          "start": 455,
+          "length": 9,
+          "type": "string",
+          "decimals": null,
+          "description": null
+        },
+        {
+          "name": "DCLTVA_CNUD9",
+          "start": 464,
+          "length": 13,
+          "type": "string",
+          "decimals": null,
+          "description": null
+        },
+        {
+          "name": "DCLTVA_RASOC",
+          "start": 477,
+          "length": 35,
+          "type": "string",
+          "decimals": null,
+          "description": null
+        },
+        {
+          "name": "DCLTVA_NOCLI",
+          "start": 512,
+          "length": 35,
+          "type": "string",
+          "decimals": null,
+          "description": null
+        },
+        {
+          "name": "DCLTVA_ADCLI",
+          "start": 547,
+          "length": 35,
+          "type": "string",
+          "decimals": null,
+          "description": null
+        },
+        {
+          "name": "DCLTVA_LORES",
+          "start": 582,
+          "length": 35,
+          "type": "string",
+          "decimals": null,
+          "description": null
+        },
+        {
+          "name": "DCLTVA_LOBDI",
+          "start": 617,
+          "length": 35,
+          "type": "string",
+          "decimals": null,
+          "description": null
+        },
+        {
+          "name": "DCLTVA_CPCLI",
+          "start": 652,
+          "length": 9,
+          "type": "string",
+          "decimals": null,
+          "description": null
+        },
+        {
+          "name": "DCLTVA_CPAYS",
+          "start": 661,
+          "length": 3,
+          "type": "string",
+          "decimals": null,
+          "description": null
+        },
+        {
+          "name": "DCLTVA_SIREN",
+          "start": 664,
+          "length": 9,
+          "type": "string",
+          "decimals": null,
+          "description": null
+        },
+        {
+          "name": "LIVPAR_CNUD7",
+          "start": 673,
+          "length": 13,
+          "type": "string",
+          "decimals": null,
+          "description": null
+        },
+        {
+          "name": "LIVPAR_RASOC",
+          "start": 686,
+          "length": 35,
+          "type": "string",
+          "decimals": null,
+          "description": null
+        },
+        {
+          "name": "LIVPAR_NOCLI",
+          "start": 721,
+          "length": 35,
+          "type": "string",
+          "decimals": null,
+          "description": null
+        },
+        {
+          "name": "LIVPAR_ADCLI",
+          "start": 756,
+          "length": 35,
+          "type": "string",
+          "decimals": null,
+          "description": null
+        },
+        {
+          "name": "LIVPAR_LORES",
+          "start": 791,
+          "length": 35,
+          "type": "string",
+          "decimals": null,
+          "description": null
+        },
+        {
+          "name": "LIVPAR_LOBDI",
+          "start": 826,
+          "length": 35,
+          "type": "string",
+          "decimals": null,
+          "description": null
+        },
+        {
+          "name": "LIVPAR_CPCLI",
+          "start": 861,
+          "length": 9,
+          "type": "string",
+          "decimals": null,
+          "description": null
+        },
+        {
+          "name": "LIVPAR_CPAYS",
+          "start": 870,
+          "length": 3,
+          "type": "string",
+          "decimals": null,
+          "description": null
+        },
+        {
+          "name": "LIVPAR_SIREN",
+          "start": 873,
+          "length": 9,
+          "type": "string",
+          "decimals": null,
+          "description": null
+        },
+        {
+          "name": "FILXX",
+          "start": 882,
+          "length": 319,
+          "type": "string",
+          "decimals": null,
+          "description": null
+        }
+      ]
+    },
+    {
+      "name": "LIG",
+      "selector": {
+        "start": 1,
+        "length": 3,
+        "value": "LIG"
+      },
+      "fields": [
+        {
+          "name": "TYPEN",
+          "start": 1,
+          "length": 3,
+          "type": "string",
+          "decimals": null,
+          "description": null
+        },
+        {
+          "name": "NULOT",
+          "start": 4,
+          "length": 14,
+          "type": "string",
+          "decimals": null,
+          "description": null
+        },
+        {
+          "name": "EANFO",
+          "start": 18,
+          "length": 13,
+          "type": "string",
+          "decimals": null,
+          "description": null
+        },
+        {
+          "name": "NUFAC",
+          "start": 31,
+          "length": 15,
+          "type": "string",
+          "decimals": null,
+          "description": null
+        },
+        {
+          "name": "NBCOM",
+          "start": 46,
+          "length": 3,
+          "type": "integer",
+          "decimals": null,
+          "description": null
+        },
+        {
+          "name": "NULIG",
+          "start": 49,
+          "length": 6,
+          "type": "integer",
+          "decimals": null,
+          "description": null
+        },
+        {
+          "name": "EAN13",
+          "start": 55,
+          "length": 13,
+          "type": "string",
+          "decimals": null,
+          "description": null
+        },
+        {
+          "name": "TYPRO",
+          "start": 68,
+          "length": 1,
+          "type": "string",
+          "decimals": null,
+          "description": null
+        },
+        {
+          "name": "CT_LIBTI",
+          "start": 69,
+          "length": 35,
+          "type": "string",
+          "decimals": null,
+          "description": null
+        },
+        {
+          "name": "CT_NUART",
+          "start": 104,
+          "length": 7,
+          "type": "string",
+          "decimals": null,
+          "description": null
+        },
+        {
+          "name": "CT_TXTAX",
+          "start": 111,
+          "length": 5,
+          "type": "decimal",
+          "decimals": 2,
+          "description": null
+        },
+        {
+          "name": "CT_QTFAC",
+          "start": 116,
+          "length": 15,
+          "type": "decimal",
+          "decimals": 5,
+          "description": null
+        },
+        {
+          "name": "CT_PPUHT",
+          "start": 131,
+          "length": 15,
+          "type": "decimal",
+          "decimals": 5,
+          "description": null
+        },
+        {
+          "name": "CT_PPUTC",
+          "start": 146,
+          "length": 15,
+          "type": "decimal",
+          "decimals": 5,
+          "description": null
+        },
+        {
+          "name": "CT_PUNHT",
+          "start": 161,
+          "length": 15,
+          "type": "decimal",
+          "decimals": 5,
+          "description": null
+        },
+        {
+          "name": "CT_SNETHT",
+          "start": 176,
+          "length": 1,
+          "type": "string",
+          "decimals": null,
+          "description": null
+        },
+        {
+          "name": "CT_NETHT",
+          "start": 177,
+          "length": 14,
+          "type": "decimal",
+          "decimals": 5,
+          "description": null
+        },
+        {
+          "name": "CT_SMTREM",
+          "start": 191,
+          "length": 1,
+          "type": "string",
+          "decimals": null,
+          "description": null
+        },
+        {
+          "name": "CT_MTREM",
+          "start": 192,
+          "length": 14,
+          "type": "decimal",
+          "decimals": 5,
+          "description": null
+        },
+        {
+          "name": "CT_TXREM",
+          "start": 206,
+          "length": 5,
+          "type": "decimal",
+          "decimals": 2,
+          "description": null
+        },
+        {
+          "name": "CT_NBECH",
+          "start": 211,
+          "length": 5,
+          "type": "integer",
+          "decimals": null,
+          "description": null
+        },
+        {
+          "name": "CT_QUARF",
+          "start": 216,
+          "length": 3,
+          "type": "string",
+          "decimals": null,
+          "description": null
+        },
+        {
+          "name": "CT_REFLI",
+          "start": 219,
+          "length": 15,
+          "type": "string",
+          "decimals": null,
+          "description": null
+        },
+        {
+          "name": "CT_DTECH",
+          "start": 234,
+          "length": 8,
+          "type": "string",
+          "decimals": null,
+          "description": null
+        },
+        {
+          "name": "CT_SMTECH",
+          "start": 242,
+          "length": 1,
+          "type": "string",
+          "decimals": null,
+          "description": null
+        },
+        {
+          "name": "CT_MTECH",
+          "start": 243,
+          "length": 14,
+          "type": "decimal",
+          "decimals": 5,
+          "description": null
+        },
+        {
+          "name": "CT_NOAUT",
+          "start": 257,
+          "length": 35,
+          "type": "string",
+          "decimals": null,
+          "description": null
+        },
+        {
+          "name": "CT_LIEDI",
+          "start": 292,
+          "length": 35,
+          "type": "string",
+          "decimals": null,
+          "description": null
+        },
+        {
+          "name": "CT_SURRE",
+          "start": 327,
+          "length": 1,
+          "type": "string",
+          "decimals": null,
+          "description": null
+        },
+        {
+          "name": "CT_QTPCO",
+          "start": 328,
+          "length": 15,
+          "type": "decimal",
+          "decimals": 5,
+          "description": null
+        },
+        {
+          "name": "CT_FILXX",
+          "start": 343,
+          "length": 858,
+          "type": "string",
+          "decimals": null,
+          "description": null
+        }
+      ]
+    },
+    {
+      "name": "LEC",
+      "selector": {
+        "start": 1,
+        "length": 3,
+        "value": "LEC"
+      },
+      "fields": [
+        {
+          "name": "TYPEN",
+          "start": 1,
+          "length": 3,
+          "type": "string",
+          "decimals": null,
+          "description": null
+        },
+        {
+          "name": "NULOT",
+          "start": 4,
+          "length": 14,
+          "type": "string",
+          "decimals": null,
+          "description": null
+        },
+        {
+          "name": "EANFO",
+          "start": 18,
+          "length": 13,
+          "type": "string",
+          "decimals": null,
+          "description": null
+        },
+        {
+          "name": "NUFAC",
+          "start": 31,
+          "length": 15,
+          "type": "string",
+          "decimals": null,
+          "description": null
+        },
+        {
+          "name": "NUMBL",
+          "start": 46,
+          "length": 13,
+          "type": "string",
+          "decimals": null,
+          "description": null
+        },
+        {
+          "name": "NULIG",
+          "start": 59,
+          "length": 6,
+          "type": "integer",
+          "decimals": null,
+          "description": null
+        },
+        {
+          "name": "DTECH",
+          "start": 65,
+          "length": 8,
+          "type": "string",
+          "decimals": null,
+          "description": null
+        },
+        {
+          "name": "SMTECH",
+          "start": 73,
+          "length": 1,
+          "type": "string",
+          "decimals": null,
+          "description": null
+        },
+        {
+          "name": "MTECH",
+          "start": 74,
+          "length": 14,
+          "type": "decimal",
+          "decimals": 5,
+          "description": null
+        },
+        {
+          "name": "FILXX",
+          "start": 88,
+          "length": 1113,
+          "type": "string",
+          "decimals": null,
+          "description": null
+        }
+      ]
+    },
+    {
+      "name": "PIE",
+      "selector": {
+        "start": 1,
+        "length": 3,
+        "value": "PIE"
+      },
+      "fields": [
+        {
+          "name": "TYPEN",
+          "start": 1,
+          "length": 3,
+          "type": "string",
+          "decimals": null,
+          "description": null
+        },
+        {
+          "name": "NULOT",
+          "start": 4,
+          "length": 14,
+          "type": "string",
+          "decimals": null,
+          "description": null
+        },
+        {
+          "name": "EANFO",
+          "start": 18,
+          "length": 13,
+          "type": "string",
+          "decimals": null,
+          "description": null
+        },
+        {
+          "name": "NUFAC",
+          "start": 31,
+          "length": 15,
+          "type": "string",
+          "decimals": null,
+          "description": null
+        },
+        {
+          "name": "TXTVA",
+          "start": 46,
+          "length": 5,
+          "type": "decimal",
+          "decimals": 2,
+          "description": null
+        },
+        {
+          "name": "SMONHT",
+          "start": 51,
+          "length": 1,
+          "type": "string",
+          "decimals": null,
+          "description": null
+        },
+        {
+          "name": "MONHT",
+          "start": 52,
+          "length": 14,
+          "type": "decimal",
+          "decimals": 5,
+          "description": null
+        },
+        {
+          "name": "SMTTVA",
+          "start": 66,
+          "length": 1,
+          "type": "string",
+          "decimals": null,
+          "description": null
+        },
+        {
+          "name": "MTTVA",
+          "start": 67,
+          "length": 14,
+          "type": "decimal",
+          "decimals": 5,
+          "description": null
+        },
+        {
+          "name": "SMTTTC",
+          "start": 81,
+          "length": 1,
+          "type": "string",
+          "decimals": null,
+          "description": null
+        },
+        {
+          "name": "MTTTC",
+          "start": 82,
+          "length": 14,
+          "type": "decimal",
+          "decimals": 5,
+          "description": null
+        },
+        {
+          "name": "QTTOT",
+          "start": 96,
+          "length": 15,
+          "type": "decimal",
+          "decimals": 5,
+          "description": null
+        },
+        {
+          "name": "FILXX",
+          "start": 111,
+          "length": 1090,
+          "type": "string",
+          "decimals": null,
+          "description": null
+        }
+      ]
+    }
+  ]
+}

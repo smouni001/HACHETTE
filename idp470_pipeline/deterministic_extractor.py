@@ -1,0 +1,30 @@
+from __future__ import annotations
+
+import logging
+from pathlib import Path
+
+from .idil_structure_rules import attach_idil_structure_rules
+from .models import ContractSpec
+from .pli_layout_parser import extract_contract_from_pli_source
+
+LOGGER = logging.getLogger(__name__)
+
+
+def extract_contract_deterministic(
+    source_path: Path,
+    source_program: str = "IDP470RA",
+    strict: bool = True,
+    spec_pdf_path: Path | None = None,
+) -> ContractSpec:
+    if source_path.suffix.lower() == ".pdf":
+        raise ValueError(
+            "The main source must be IDP470RA.pli. Use the PDF only as structure reference."
+        )
+
+    LOGGER.info("Deterministic extraction from source code (main): %s", source_path)
+    contract = extract_contract_from_pli_source(
+        source_path=source_path,
+        source_program=source_program,
+        strict=strict,
+    )
+    return attach_idil_structure_rules(contract=contract, spec_pdf_path=spec_pdf_path)

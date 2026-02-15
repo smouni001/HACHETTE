@@ -1,0 +1,27 @@
+# Secrets
+.streamlit/secrets.toml
+secrets.local.toml
+config/ui_settings.local.toml
+
+# Python cache
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+
+# Virtual env
+.venv/
+venv/
+env/
+
+# Build / artifacts
+outputs*/
+*.xlsx
+*.pdf
+*.jsonl
+
+# OS / IDE
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
