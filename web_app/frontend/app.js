@@ -14,6 +14,7 @@ const progressValue = document.getElementById("progressValue");
 const progressBar = document.getElementById("progressBar");
 const progressWrap = document.getElementById("progressWrap");
 
+const clientCount = document.getElementById("clientCount");
 const invoiceCount = document.getElementById("invoiceCount");
 const lineCount = document.getElementById("lineCount");
 
@@ -138,6 +139,7 @@ function applyStatus(payload) {
   }
 
   const metrics = payload.metrics || {};
+  setMetricValue(clientCount, metrics.client_count || 0);
   setMetricValue(invoiceCount, metrics.invoice_count || 0);
   setMetricValue(lineCount, metrics.line_count || 0);
   setWarnings(payload.warnings || []);
@@ -232,6 +234,7 @@ form.addEventListener("submit", async (event) => {
     if (progressValue) {
       progressValue.textContent = "2%";
     }
+    setMetricValue(clientCount, 0);
     setMetricValue(invoiceCount, 0);
     setMetricValue(lineCount, 0);
     setDownload(downloadExcel, null);

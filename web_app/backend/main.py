@@ -49,6 +49,7 @@ class JobState:
     warnings: list[str] = field(default_factory=list)
     metrics: dict[str, int] = field(
         default_factory=lambda: {
+            "client_count": 0,
             "invoice_count": 0,
             "line_count": 0,
             "issues_count": 0,
@@ -98,6 +99,38 @@ def _invoice_count(records: list[dict[str, Any]]) -> int:
         if str(record.get("NUFAC", "")).strip()
     }
     return len(all_invoices)
+
+
+def _client_count(records: list[dict[str, Any]]) -> int:
+    ent_clients = {
+        str(record.get("NUCLI", "")).strip()
+        for record in records
+        if record.get("record_type") == "ENT" and str(record.get("NUCLI", "")).strip()
+    }
+    if ent_clients:
+        return len(ent_clients)
+
+    adr_clients = {
+        str(record.get("CLLIV_NOCLI", "")).strip()
+        for record in records
+        if record.get("record_type") == "ADR" and str(record.get("CLLIV_NOCLI", "")).strip()
+    }
+    if adr_clients:
+        return len(adr_clients)
+
+    all_clients = {
+        str(record.get("NUCLI", "")).strip()
+        for record in records
+        if str(record.get("NUCLI", "")).strip()
+    }
+    all_clients.update(
+        {
+            str(record.get("CLLIV_NOCLI", "")).strip()
+            for record in records
+            if str(record.get("CLLIV_NOCLI", "")).strip()
+        }
+    )
+    return len(all_clients)
 
 
 def _safe_logo_path() -> Path | None:
@@ -189,6 +222,7 @@ def _process_job(job_id: str, input_path: Path) -> None:
             outputs["pdf_synthese"] = str(pdf_synthese_path)
 
         metrics = {
+            "client_count": _client_count(records),
             "invoice_count": _invoice_count(records),
             "line_count": len(records) + len(issues),
             "issues_count": len(issues),
