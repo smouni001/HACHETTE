@@ -603,39 +603,13 @@ def export_first_invoice_pdf(
         from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
         from reportlab.lib.units import mm
         from reportlab.lib.utils import ImageReader
-        from reportlab.platypus import Image, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
+        from reportlab.platypus import Image, PageBreak, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
     except ModuleNotFoundError as error:
         raise RuntimeError("PDF export requires reportlab. Install with: pip install reportlab") from error
 
-    ent = next((record for record in records if record.get("record_type") == "ENT"), None)
-    if ent is None:
+    ent_records = [record for record in records if record.get("record_type") == "ENT"]
+    if not ent_records:
         raise ValueError("Aucun enregistrement ENT trouve pour construire le PDF de facture.")
-
-    invoice_key = str(ent.get("NUFAC", "")).strip()
-    invoice_date = str(ent.get("DAFAC", "")).strip()
-
-    adr = next(
-        (
-            record
-            for record in records
-            if record.get("record_type") == "ADR" and str(record.get("NUFAC", "")).strip() == invoice_key
-        ),
-        None,
-    )
-    if adr is None:
-        adr = next((record for record in records if record.get("record_type") == "ADR"), {})
-
-    lig_rows = [
-        record
-        for record in records
-        if record.get("record_type") == "LIG" and str(record.get("NUFAC", "")).strip() == invoice_key
-    ]
-    if not lig_rows:
-        lig_rows = [record for record in records if record.get("record_type") == "LIG"][:50]
-
-    total_ht = _signed_value(ent.get("SMONHT"), ent.get("MONHT"))
-    total_tva = _signed_value(ent.get("SMTTVA"), ent.get("MTTVA"))
-    total_ttc = _signed_value(ent.get("SMTTTC"), ent.get("MTTTC"))
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
     doc = SimpleDocTemplate(str(output_path), pagesize=A4, rightMargin=15 * mm, leftMargin=15 * mm)
@@ -658,125 +632,173 @@ def export_first_invoice_pdf(
     )
     story: list[Any] = []
 
+    invoice_entries: list[tuple[str, dict[str, Any]]] = []
+    seen_keys: set[str] = set()
+    for index, ent in enumerate(ent_records, start=1):
+        invoice_key = str(ent.get("NUFAC", "")).strip() or f"SANS_NUM_{index}"
+        if invoice_key in seen_keys:
+            continue
+        seen_keys.add(invoice_key)
+        invoice_entries.append((invoice_key, ent))
+
     resolved_logo = _resolve_logo_path(logo_path)
-    if resolved_logo:
-        image_reader = ImageReader(str(resolved_logo))
-        src_w, src_h = image_reader.getSize()
-        target_w = 47 * mm
-        target_h = target_w * (src_h / src_w)
-        if target_h > 18 * mm:
-            ratio = (18 * mm) / target_h
-            target_w *= ratio
-            target_h *= ratio
-        header_logo: Any = Image(str(resolved_logo), width=target_w, height=target_h)
-    else:
-        header_logo = Paragraph("<b>Hachette Livre</b>", styles["Heading3"])
+    for invoice_index, (invoice_key, ent) in enumerate(invoice_entries, start=1):
+        if invoice_index > 1:
+            story.append(PageBreak())
 
-    header_info = Table(
-        [
-            [Paragraph("FACTURE", title_style)],
-            [Paragraph(f"Numero facture: <b>{invoice_key}</b>", meta_style)],
-            [Paragraph(f"Date: <b>{invoice_date}</b>", meta_style)],
-        ],
-        colWidths=[84 * mm],
-    )
-    header_info.setStyle(
-        TableStyle(
+        invoice_date = str(ent.get("DAFAC", "")).strip()
+        adr = next(
+            (
+                record
+                for record in records
+                if record.get("record_type") == "ADR" and str(record.get("NUFAC", "")).strip() == invoice_key
+            ),
+            None,
+        )
+        if adr is None:
+            adr = next((record for record in records if record.get("record_type") == "ADR"), {})
+
+        lig_rows = [
+            record
+            for record in records
+            if record.get("record_type") == "LIG" and str(record.get("NUFAC", "")).strip() == invoice_key
+        ]
+        if not lig_rows:
+            lig_rows = [record for record in records if record.get("record_type") == "LIG"][:50]
+
+        total_ht = _signed_value(ent.get("SMONHT"), ent.get("MONHT"))
+        total_tva = _signed_value(ent.get("SMTTVA"), ent.get("MTTVA"))
+        total_ttc = _signed_value(ent.get("SMTTTC"), ent.get("MTTTC"))
+
+        if resolved_logo:
+            image_reader = ImageReader(str(resolved_logo))
+            src_w, src_h = image_reader.getSize()
+            target_w = 47 * mm
+            target_h = target_w * (src_h / src_w)
+            if target_h > 18 * mm:
+                ratio = (18 * mm) / target_h
+                target_w *= ratio
+                target_h *= ratio
+            header_logo: Any = Image(str(resolved_logo), width=target_w, height=target_h)
+        else:
+            header_logo = Paragraph("<b>Hachette Livre</b>", styles["Heading3"])
+
+        header_info = Table(
             [
-                ("VALIGN", (0, 0), (-1, -1), "TOP"),
-                ("LEFTPADDING", (0, 0), (-1, -1), 0),
-                ("RIGHTPADDING", (0, 0), (-1, -1), 0),
-                ("TOPPADDING", (0, 0), (-1, -1), 0),
-                ("BOTTOMPADDING", (0, 0), (-1, -1), 2),
-            ]
+                [Paragraph("FACTURE", title_style)],
+                [Paragraph(f"Numero facture: <b>{invoice_key}</b>", meta_style)],
+                [Paragraph(f"Date: <b>{invoice_date}</b>", meta_style)],
+            ],
+            colWidths=[84 * mm],
         )
-    )
-
-    header_table = Table([[header_logo, header_info]], colWidths=[90 * mm, 90 * mm])
-    header_table.setStyle(
-        TableStyle(
-            [
-                ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-                ("ALIGN", (1, 0), (1, 0), "RIGHT"),
-                ("BOX", (0, 0), (-1, -1), 0.6, colors.HexColor("#c6d3e1")),
-                ("LEFTPADDING", (0, 0), (-1, -1), 8),
-                ("RIGHTPADDING", (0, 0), (-1, -1), 8),
-                ("TOPPADDING", (0, 0), (-1, -1), 6),
-                ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
-                ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#f7fbff")),
-            ]
-        )
-    )
-    story.append(header_table)
-    story.append(Spacer(1, 6 * mm))
-
-    client_name = _first_non_empty(adr, ["CLLIV_RASOC", "CLLIV_NOCLI"])
-    client_address = [
-        _first_non_empty(adr, ["CLLIV_ADCLI"]),
-        _first_non_empty(adr, ["CLLIV_LORES"]),
-        _first_non_empty(adr, ["CLLIV_LOBDI"]),
-        " ".join(
-            str(value).strip()
-            for value in [_first_non_empty(adr, ["CLLIV_CPCLI"]), _first_non_empty(adr, ["CLLIV_CPAYS"])]
-            if str(value).strip()
-        ),
-    ]
-    lines = [str(client_name).strip(), *[str(line).strip() for line in client_address if str(line).strip()]]
-    client_block = "<br/>".join(lines)
-    story.append(
-        Paragraph(
-            f"<b>Client</b><br/>{client_block}",
-            ParagraphStyle("client_block", parent=styles["Normal"], fontName="Helvetica", fontSize=9.5, leading=12),
-        )
-    )
-    story.append(Spacer(1, 6 * mm))
-
-    table_rows = [["Ligne", "EAN13", "Designation", "Qte", "PU HT", "Net HT"]]
-    for row in lig_rows:
-        description = _first_non_empty(row, ["CT_LIBTI", "LIBTI"])
-        quantity = _first_non_empty(row, ["CT_QTFAC", "QTFAC"])
-        unit_price = _first_non_empty(row, ["CT_PUNHT", "PUNHT"])
-        net_ht = _signed_value(_first_non_empty(row, ["CT_SNETHT", "SNETHT"]), _first_non_empty(row, ["CT_NETHT", "NETHT"]))
-        table_rows.append(
-            [
-                _first_non_empty(row, ["NULIG"]),
-                _first_non_empty(row, ["EAN13"]),
-                str(description)[:60],
-                quantity,
-                unit_price,
-                _fmt_amount(net_ht),
-            ]
+        header_info.setStyle(
+            TableStyle(
+                [
+                    ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                    ("LEFTPADDING", (0, 0), (-1, -1), 0),
+                    ("RIGHTPADDING", (0, 0), (-1, -1), 0),
+                    ("TOPPADDING", (0, 0), (-1, -1), 0),
+                    ("BOTTOMPADDING", (0, 0), (-1, -1), 2),
+                ]
+            )
         )
 
-    lines_table = Table(table_rows, colWidths=[18 * mm, 33 * mm, 70 * mm, 16 * mm, 24 * mm, 24 * mm], repeatRows=1)
-    lines_table.setStyle(
-        TableStyle(
-            [
-                ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#eaf2fb")),
-                ("GRID", (0, 0), (-1, -1), 0.25, colors.HexColor("#b7c8d8")),
-                ("ALIGN", (3, 1), (-1, -1), "RIGHT"),
-                ("VALIGN", (0, 0), (-1, -1), "TOP"),
-                ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
-                ("FONTSIZE", (0, 0), (-1, -1), 8),
-            ]
+        header_table = Table([[header_logo, header_info]], colWidths=[90 * mm, 90 * mm])
+        header_table.setStyle(
+            TableStyle(
+                [
+                    ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                    ("ALIGN", (1, 0), (1, 0), "RIGHT"),
+                    ("BOX", (0, 0), (-1, -1), 0.6, colors.HexColor("#c6d3e1")),
+                    ("LEFTPADDING", (0, 0), (-1, -1), 8),
+                    ("RIGHTPADDING", (0, 0), (-1, -1), 8),
+                    ("TOPPADDING", (0, 0), (-1, -1), 6),
+                    ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
+                    ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#f7fbff")),
+                ]
+            )
         )
-    )
-    story.append(lines_table)
-    story.append(Spacer(1, 6 * mm))
+        story.append(header_table)
+        story.append(Spacer(1, 6 * mm))
 
-    totals_rows = [["Total HT", _fmt_amount(total_ht)], ["TVA", _fmt_amount(total_tva)], ["Total TTC", _fmt_amount(total_ttc)]]
-    totals_table = Table(totals_rows, colWidths=[35 * mm, 35 * mm], hAlign="RIGHT")
-    totals_table.setStyle(
-        TableStyle(
-            [
-                ("GRID", (0, 0), (-1, -1), 0.25, colors.HexColor("#b7c8d8")),
-                ("FONTNAME", (0, 0), (0, -1), "Helvetica-Bold"),
-                ("ALIGN", (1, 0), (1, -1), "RIGHT"),
-                ("BACKGROUND", (0, 2), (-1, 2), colors.HexColor("#eaf2fb")),
-            ]
+        client_name = _first_non_empty(adr, ["CLLIV_RASOC", "CLLIV_NOCLI"])
+        client_address = [
+            _first_non_empty(adr, ["CLLIV_ADCLI"]),
+            _first_non_empty(adr, ["CLLIV_LORES"]),
+            _first_non_empty(adr, ["CLLIV_LOBDI"]),
+            " ".join(
+                str(value).strip()
+                for value in [_first_non_empty(adr, ["CLLIV_CPCLI"]), _first_non_empty(adr, ["CLLIV_CPAYS"])]
+                if str(value).strip()
+            ),
+        ]
+        lines = [str(client_name).strip(), *[str(line).strip() for line in client_address if str(line).strip()]]
+        client_block = "<br/>".join(lines)
+        story.append(
+            Paragraph(
+                f"<b>Client</b><br/>{client_block}",
+                ParagraphStyle("client_block", parent=styles["Normal"], fontName="Helvetica", fontSize=9.5, leading=12),
+            )
         )
-    )
-    story.append(totals_table)
+        story.append(Spacer(1, 6 * mm))
+
+        table_rows = [["Ligne", "EAN13", "Designation", "Qte", "PU HT", "Net HT"]]
+        for row in lig_rows:
+            description = _first_non_empty(row, ["CT_LIBTI", "LIBTI"])
+            quantity = _first_non_empty(row, ["CT_QTFAC", "QTFAC"])
+            unit_price = _first_non_empty(row, ["CT_PUNHT", "PUNHT"])
+            net_ht = _signed_value(
+                _first_non_empty(row, ["CT_SNETHT", "SNETHT"]),
+                _first_non_empty(row, ["CT_NETHT", "NETHT"]),
+            )
+            table_rows.append(
+                [
+                    _first_non_empty(row, ["NULIG"]),
+                    _first_non_empty(row, ["EAN13"]),
+                    str(description)[:60],
+                    quantity,
+                    unit_price,
+                    _fmt_amount(net_ht),
+                ]
+            )
+
+        lines_table = Table(
+            table_rows,
+            colWidths=[18 * mm, 33 * mm, 70 * mm, 16 * mm, 24 * mm, 24 * mm],
+            repeatRows=1,
+        )
+        lines_table.setStyle(
+            TableStyle(
+                [
+                    ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#eaf2fb")),
+                    ("GRID", (0, 0), (-1, -1), 0.25, colors.HexColor("#b7c8d8")),
+                    ("ALIGN", (3, 1), (-1, -1), "RIGHT"),
+                    ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                    ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+                    ("FONTSIZE", (0, 0), (-1, -1), 8),
+                ]
+            )
+        )
+        story.append(lines_table)
+        story.append(Spacer(1, 6 * mm))
+
+        totals_rows = [
+            ["Total HT", _fmt_amount(total_ht)],
+            ["TVA", _fmt_amount(total_tva)],
+            ["Total TTC", _fmt_amount(total_ttc)],
+        ]
+        totals_table = Table(totals_rows, colWidths=[35 * mm, 35 * mm], hAlign="RIGHT")
+        totals_table.setStyle(
+            TableStyle(
+                [
+                    ("GRID", (0, 0), (-1, -1), 0.25, colors.HexColor("#b7c8d8")),
+                    ("FONTNAME", (0, 0), (0, -1), "Helvetica-Bold"),
+                    ("ALIGN", (1, 0), (1, -1), "RIGHT"),
+                    ("BACKGROUND", (0, 2), (-1, 2), colors.HexColor("#eaf2fb")),
+                ]
+            )
+        )
+        story.append(totals_table)
 
     doc.build(story)
     LOGGER.info("PDF exported to %s", output_path)
