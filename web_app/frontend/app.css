@@ -249,6 +249,25 @@ body {
   gap: 8px;
 }
 
+.local-program-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.secondary-btn {
+  border: 1px solid #9cb6d3;
+  background: #ffffff;
+  color: #1f4062;
+  padding: 10px 14px;
+}
+
+.secondary-btn:hover {
+  border-color: #7ea3c8;
+  background: #f1f7ff;
+}
+
 .catalog-status.is-loading::before {
   content: "";
   width: 11px;

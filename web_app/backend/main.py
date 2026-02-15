@@ -32,12 +32,15 @@ DEFAULT_SPEC_PDF_PATH = Path(
 ).expanduser()
 LOGO_PATH = Path(os.getenv("IDP470_WEB_LOGO", PROJECT_ROOT / "assets" / "logo_hachette_livre.png")).expanduser()
 JOBS_ROOT = Path(os.getenv("IDP470_WEB_JOBS_DIR", PROJECT_ROOT / "web_app" / "jobs")).expanduser()
+LOCAL_PROGRAMS_ROOT = JOBS_ROOT / "_program_sources"
 DEFAULT_INPUT_ENCODING = os.getenv("IDP470_WEB_INPUT_ENCODING", "latin-1")
 DEFAULT_CONTINUE_ON_ERROR = os.getenv("IDP470_WEB_CONTINUE_ON_ERROR", "false").strip().lower() == "true"
 DEFAULT_REUSE_CONTRACT = os.getenv("IDP470_WEB_REUSE_CONTRACT", "true").strip().lower() == "true"
 SUPPORTED_ANALYZERS = {"idp470_pli"}
+ALLOWED_SOURCE_SUFFIXES = {".pli", ".cbl", ".jcl", ".txt"}
 
 JOBS_ROOT.mkdir(parents=True, exist_ok=True)
+LOCAL_PROGRAMS_ROOT.mkdir(parents=True, exist_ok=True)
 
 
 def _utc_now() -> str:
@@ -289,6 +292,21 @@ def _resolve_program(program_id: str | None) -> ProgramRuntime:
         allowed = ", ".join(sorted(programs.keys()))
         raise HTTPException(status_code=400, detail=f"Programme inconnu '{program_id}'. Programmes autorises: {allowed}")
     return runtime
+
+
+def _register_runtime(runtime: ProgramRuntime) -> None:
+    global _PROGRAMS_CACHE
+    with _PROGRAMS_LOCK:
+        if _PROGRAMS_CACHE is None:
+            _PROGRAMS_CACHE = _load_program_registry()
+        _PROGRAMS_CACHE[runtime.program_id] = runtime
+    with _FLOW_PROFILES_LOCK:
+        _FLOW_PROFILES_CACHE.pop(runtime.program_id, None)
+    with _CONTRACT_LOCK:
+        stale_prefix = f"{runtime.program_id}:"
+        stale_keys = [key for key in _CONTRACT_CACHE.keys() if key.startswith(stale_prefix)]
+        for key in stale_keys:
+            _CONTRACT_CACHE.pop(key, None)
 
 
 def _invoice_count(records: list[dict[str, Any]]) -> int:
@@ -1048,6 +1066,67 @@ def programs() -> ProgramsResponse:
             )
             for item in program_items
         ],
+    )
+
+
+@app.post("/api/programs/local", response_model=ProgramSummaryResponse)
+async def register_local_program(
+    source_file: UploadFile = File(...),
+    program_name: str | None = Form(default=None),
+    display_name: str | None = Form(default=None),
+    source_encoding: str = Form(default=DEFAULT_INPUT_ENCODING),
+    invoice_only_default: bool = Form(default=False),
+    spec_pdf_path: str | None = Form(default=None),
+) -> ProgramSummaryResponse:
+    if not source_file.filename:
+        raise HTTPException(status_code=400, detail="Aucun fichier programme transmis.")
+
+    safe_name = Path(source_file.filename).name
+    suffix = Path(safe_name).suffix.lower()
+    if suffix not in ALLOWED_SOURCE_SUFFIXES:
+        allowed = ", ".join(sorted(ALLOWED_SOURCE_SUFFIXES))
+        raise HTTPException(status_code=400, detail=f"Format non supporte ({suffix}). Formats autorises: {allowed}")
+
+    payload = await source_file.read()
+    if not payload:
+        raise HTTPException(status_code=400, detail="Le programme local charge est vide.")
+
+    effective_encoding = (source_encoding or DEFAULT_INPUT_ENCODING).strip() or DEFAULT_INPUT_ENCODING
+    source_program_name = (program_name or Path(safe_name).stem or "LOCAL_PROGRAM").strip().upper()
+    local_program_id = f"local_{uuid.uuid4().hex[:10]}"
+    target_path = LOCAL_PROGRAMS_ROOT / f"{local_program_id}_{safe_name}"
+    target_path.write_bytes(payload)
+
+    resolved_spec_pdf_path: Path | None = None
+    if spec_pdf_path:
+        candidate = _resolve_project_path(spec_pdf_path)
+        if candidate.exists():
+            resolved_spec_pdf_path = candidate
+
+    runtime = ProgramRuntime(
+        program_id=local_program_id,
+        display_name=(display_name or f"Programme Local {source_program_name}").strip(),
+        description=f"Programme local charge depuis {safe_name}",
+        source_program=source_program_name,
+        source_path=target_path,
+        source_encoding=effective_encoding,
+        analyzer_engine="idp470_pli",
+        spec_pdf_path=resolved_spec_pdf_path,
+        invoice_only_default=invoice_only_default,
+        default_flow_type="output",
+        default_file_name="FICDEMA",
+        continue_on_error=DEFAULT_CONTINUE_ON_ERROR,
+        reuse_contract=DEFAULT_REUSE_CONTRACT,
+    )
+    _register_runtime(runtime)
+
+    return ProgramSummaryResponse(
+        program_id=runtime.program_id,
+        display_name=runtime.display_name,
+        source_program=runtime.source_program,
+        analyzer_engine=runtime.analyzer_engine,
+        source_path=str(runtime.source_path),
+        invoice_only_default=runtime.invoice_only_default,
     )
 
 

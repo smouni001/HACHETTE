@@ -51,6 +51,7 @@ Puis ouvrir:
 
 - `GET /api/health`
 - `GET /api/programs` (liste des programmes disponibles)
+- `POST /api/programs/local` (upload d'un programme source local pour analyse dynamique)
 - `GET /api/catalog?program_id=<id>&advanced=<true|false>`
   - selection hierarchique: Programme -> Flux -> Fichier
   - par defaut: seulement les fichiers Factures
@@ -124,6 +125,18 @@ Avant tout parsing, le backend compare le contenu charge avec la structure atten
 4. suggestion d'un fichier logique probable en cas de mismatch
 
 Si la correspondance echoue, le job est bloque avec erreur explicite.
+
+## 4.5) Programme principal + chargement local
+
+- Le programme principal reste `IDP470RA` (selection par defaut).
+- Depuis l'UI, vous pouvez choisir `Charger un programme local...`.
+- Chargez un source local (`.pli`, `.cbl`, `.jcl`, `.txt`) puis cliquez `Analyser ce programme`.
+- L'application calcule ensuite dynamiquement:
+  - les flux `Input/Output`,
+  - les fichiers logiques,
+  - les structures associees,
+  - la validation stricte du fichier a traiter.
+- Le traitement reste identique au mode `Hors facture` (parsing generique + verification structurelle + export Excel).
 
 ## 4.1) Logique de switch conditionnel
 

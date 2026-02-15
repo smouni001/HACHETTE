@@ -32,6 +32,14 @@
               <select id="programId" name="programId" required></select>
             </div>
           </div>
+          <div id="localProgramPanel" class="upload-zone hidden">
+            <label for="localProgramFile" class="file-label">Charger un programme local (.pli/.cbl/.jcl/.txt)</label>
+            <input id="localProgramFile" name="localProgramFile" type="file" accept=".pli,.cbl,.jcl,.txt" />
+            <div class="local-program-actions">
+              <button id="loadLocalProgramBtn" type="button" class="secondary-btn">Analyser ce programme</button>
+              <span id="localProgramStatus" class="hint catalog-status">Aucun programme local charge.</span>
+            </div>
+          </div>
           <div class="form-row">
             <div>
               <label for="flowType" class="file-label">Type de flux</label>

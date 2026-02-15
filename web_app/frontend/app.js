@@ -1,5 +1,9 @@
 const form = document.getElementById("jobForm");
 const programSelect = document.getElementById("programId");
+const localProgramPanel = document.getElementById("localProgramPanel");
+const localProgramFile = document.getElementById("localProgramFile");
+const loadLocalProgramBtn = document.getElementById("loadLocalProgramBtn");
+const localProgramStatus = document.getElementById("localProgramStatus");
 const flowTypeSelect = document.getElementById("flowType");
 const fileNameSelect = document.getElementById("fileName");
 const advancedModeToggle = document.getElementById("advancedMode");
@@ -38,7 +42,9 @@ let pollTimer = null;
 let catalogSourceProgram = "programme";
 let knownPrograms = [];
 let catalogProfiles = [];
+let localProgramId = null;
 const CATALOG_CACHE_TTL_MS = 5 * 60 * 1000;
+const LOCAL_PROGRAM_OPTION_VALUE = "__local_program__";
 
 const STATUS_CONFIG = {
   queued: { label: "En attente", badgeClass: "is-queued" },
@@ -112,6 +118,8 @@ function setBusy(isBusy) {
   launchBtn.disabled = isBusy;
   fileInput.disabled = isBusy;
   programSelect.disabled = isBusy;
+  localProgramFile.disabled = isBusy;
+  loadLocalProgramBtn.disabled = isBusy;
   flowTypeSelect.disabled = isBusy;
   fileNameSelect.disabled = isBusy;
   advancedModeToggle.disabled = isBusy;
@@ -119,7 +127,14 @@ function setBusy(isBusy) {
   setAdvancedModeIndicator();
 }
 
+function isLocalProgramSelection() {
+  return String(programSelect?.value || "") === LOCAL_PROGRAM_OPTION_VALUE;
+}
+
 function currentProgramId() {
+  if (isLocalProgramSelection()) {
+    return String(localProgramId || "").toLowerCase();
+  }
   return String(programSelect?.value || knownPrograms?.[0]?.program_id || "idp470ra").toLowerCase();
 }
 
@@ -197,6 +212,37 @@ function fallbackPrograms() {
   ];
 }
 
+function setLocalProgramStatus(message, isError = false) {
+  if (!localProgramStatus) {
+    return;
+  }
+  localProgramStatus.textContent = message || "";
+  localProgramStatus.style.color = isError ? "#b42318" : "";
+}
+
+function toggleLocalProgramPanel(visible) {
+  if (!localProgramPanel) {
+    return;
+  }
+  localProgramPanel.classList.toggle("hidden", !visible);
+  if (!visible) {
+    setLocalProgramStatus("Aucun programme local charge.");
+  }
+}
+
+function upsertProgram(program) {
+  const normalizedId = String(program?.program_id || "").toLowerCase();
+  if (!normalizedId) {
+    return;
+  }
+  const existingIndex = knownPrograms.findIndex((item) => String(item.program_id || "").toLowerCase() === normalizedId);
+  if (existingIndex >= 0) {
+    knownPrograms[existingIndex] = { ...knownPrograms[existingIndex], ...program, program_id: normalizedId };
+    return;
+  }
+  knownPrograms.push({ ...program, program_id: normalizedId });
+}
+
 function rebuildProgramOptions(defaultProgramId = "idp470ra") {
   const wanted = String(defaultProgramId || "idp470ra").toLowerCase();
   programSelect.innerHTML = "";
@@ -206,11 +252,55 @@ function rebuildProgramOptions(defaultProgramId = "idp470ra") {
     option.textContent = `${item.display_name || item.program_id} (${item.source_program || "-"})`;
     programSelect.appendChild(option);
   });
+  const localOption = document.createElement("option");
+  localOption.value = LOCAL_PROGRAM_OPTION_VALUE;
+  localOption.textContent = "Charger un programme local...";
+  programSelect.appendChild(localOption);
   if (!knownPrograms.length) {
+    programSelect.value = LOCAL_PROGRAM_OPTION_VALUE;
+    return;
+  }
+  if (wanted === LOCAL_PROGRAM_OPTION_VALUE) {
+    programSelect.value = LOCAL_PROGRAM_OPTION_VALUE;
     return;
   }
   const found = knownPrograms.some((item) => item.program_id === wanted);
   programSelect.value = found ? wanted : knownPrograms[0].program_id;
+}
+
+async function registerLocalProgram() {
+  const sourceFile = localProgramFile.files?.[0];
+  if (!sourceFile) {
+    setLocalProgramStatus("Selectionnez un programme local avant l'analyse.", true);
+    return null;
+  }
+
+  const formData = new FormData();
+  formData.append("source_file", sourceFile, sourceFile.name);
+  setLocalProgramStatus("Analyse du programme local en cours...");
+  loadLocalProgramBtn.disabled = true;
+
+  try {
+    const response = await fetch("/api/programs/local", {
+      method: "POST",
+      body: formData,
+    });
+    if (!response.ok) {
+      const payload = await response.json().catch(() => ({}));
+      throw new Error(payload.detail || "Impossible d'analyser ce programme local.");
+    }
+    const program = await response.json();
+    localProgramId = String(program.program_id || "").toLowerCase();
+    upsertProgram(program);
+    rebuildProgramOptions(localProgramId);
+    setLocalProgramStatus(`Programme local charge: ${program.display_name} (${program.source_program}).`);
+    return localProgramId;
+  } catch (error) {
+    setLocalProgramStatus(error.message || "Echec de l'analyse du programme local.", true);
+    return null;
+  } finally {
+    loadLocalProgramBtn.disabled = false;
+  }
 }
 
 async function loadPrograms() {
@@ -553,6 +643,15 @@ function loadFlowOptions(defaultFlowType = "output", defaultFileName = "FICDEMA"
 
 async function loadCatalog(preferredSelection = null) {
   const programId = currentProgramId();
+  if (isLocalProgramSelection() && !programId) {
+    catalogProfiles = [];
+    flowTypeSelect.innerHTML = "";
+    fileNameSelect.innerHTML = "";
+    renderProfileContext(null);
+    launchBtn.disabled = true;
+    setCatalogStatus("Chargez d'abord un programme local, puis lancez l'analyse.");
+    return;
+  }
   const advancedMode = isAdvancedModeEnabled();
   setCatalogStatus("Analyse des flux du programme en cours...", true);
   try {
@@ -563,6 +662,9 @@ async function loadCatalog(preferredSelection = null) {
       throw new Error("Catalogue indisponible");
     }
     const payload = await response.json();
+    if (payload?.program_display_name) {
+      setLocalProgramStatus(`Programme actif: ${payload.program_display_name} (${payload.source_program || "-"})`);
+    }
     writeCatalogCache(programId, advancedMode, payload);
     catalogSourceProgram = payload?.source_program || "programme";
     catalogProfiles = Array.isArray(payload.profiles) ? payload.profiles : [];
@@ -606,7 +708,27 @@ fileNameSelect.addEventListener("change", () => {
 
 programSelect.addEventListener("change", () => {
   setError("");
+  const localSelected = isLocalProgramSelection();
+  toggleLocalProgramPanel(localSelected);
+  if (localSelected && !localProgramId) {
+    catalogProfiles = [];
+    flowTypeSelect.innerHTML = "";
+    fileNameSelect.innerHTML = "";
+    renderProfileContext(null);
+    launchBtn.disabled = true;
+    setCatalogStatus("Mode programme local: chargez et analysez votre source pour afficher les flux.");
+    return;
+  }
   loadCatalog();
+});
+
+loadLocalProgramBtn.addEventListener("click", async () => {
+  const newProgramId = await registerLocalProgram();
+  if (!newProgramId) {
+    return;
+  }
+  toggleLocalProgramPanel(true);
+  await loadCatalog();
 });
 
 advancedModeToggle.addEventListener("change", () => {
@@ -624,9 +746,14 @@ form.addEventListener("submit", async (event) => {
   setWarnings([]);
 
   const file = fileInput.files?.[0];
+  const selectedProgramId = currentProgramId();
   const profile = selectedProfile();
   const advancedMode = isAdvancedModeEnabled();
 
+  if (!selectedProgramId) {
+    setError("Chargez et analysez d'abord un programme local.");
+    return;
+  }
   if (!profile) {
     setError("Selection flux/fichier invalide.");
     return;
@@ -645,7 +772,7 @@ form.addEventListener("submit", async (event) => {
   }
 
   const formData = new FormData();
-  formData.append("program_id", currentProgramId());
+  formData.append("program_id", selectedProgramId);
   formData.append("flow_type", profile.flow_type);
   formData.append("file_name", profile.file_name);
   formData.append("advanced_mode", advancedMode ? "true" : "false");
@@ -684,6 +811,7 @@ form.addEventListener("submit", async (event) => {
 (async function initCatalog() {
   setAdvancedModeIndicator();
   const selectedProgramId = await loadPrograms();
+  toggleLocalProgramPanel(isLocalProgramSelection());
   const selectedProgram = knownPrograms.find((item) => item.program_id === selectedProgramId);
   catalogSourceProgram = selectedProgram?.source_program || "programme";
   const advancedMode = isAdvancedModeEnabled();
