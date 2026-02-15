@@ -384,16 +384,6 @@ function restoreUiState(snapshot, options = {}) {
   }
 }
 
-function applyProgramModeDefault(programId) {
-  if (!programId) {
-    return;
-  }
-  if (!isPrimaryProgram(programId)) {
-    advancedModeToggle.checked = true;
-    setAdvancedModeIndicator();
-  }
-}
-
 function cacheKeyForCatalog(programId, advancedMode) {
   const safeProgramId = String(programId || "default").toLowerCase();
   return advancedMode ? `idil.catalog.${safeProgramId}.advanced` : `idil.catalog.${safeProgramId}.standard`;
@@ -1120,7 +1110,6 @@ programSelect.addEventListener("change", async () => {
   }
 
   const nextProgramId = currentProgramId();
-  applyProgramModeDefault(nextProgramId);
   const strictCatalogMode = !isPrimaryProgram(nextProgramId);
   const loaded = await loadCatalog(null, {
     allowFallback: !strictCatalogMode,
@@ -1155,7 +1144,6 @@ loadLocalProgramBtn.addEventListener("click", async () => {
     return;
   }
   toggleLocalProgramPanel(true);
-  applyProgramModeDefault(newProgramId);
   const strictCatalogMode = !isPrimaryProgram(newProgramId);
   const loaded = await loadCatalog(null, {
     allowFallback: !strictCatalogMode,
@@ -1178,18 +1166,6 @@ loadLocalProgramBtn.addEventListener("click", async () => {
 });
 
 advancedModeToggle.addEventListener("change", () => {
-  const selectedProgramId = currentProgramId();
-  if (!isPrimaryProgram(selectedProgramId) && !advancedModeToggle.checked) {
-    advancedModeToggle.checked = true;
-    setAdvancedModeIndicator();
-    showToast({
-      type: "info",
-      title: "Mode avance maintenu",
-      message: "Pour ce programme, l'analyse est forcee en mode avance.",
-    });
-    return;
-  }
-
   setAdvancedModeIndicator();
   const currentSelection = {
     flow_type: String(flowTypeSelect.value || "output").toLowerCase(),
@@ -1270,7 +1246,6 @@ form.addEventListener("submit", async (event) => {
 (async function initCatalog() {
   setAdvancedModeIndicator();
   const selectedProgramId = await loadPrograms();
-  applyProgramModeDefault(selectedProgramId);
   toggleLocalProgramPanel(isLocalProgramSelection());
   const selectedProgram = knownPrograms.find((item) => item.program_id === selectedProgramId);
   catalogSourceProgram = selectedProgram?.source_program || "programme";
