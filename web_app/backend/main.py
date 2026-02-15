@@ -17,7 +17,6 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
-import pandas as pd
 
 from idp470_pipeline.deterministic_extractor import extract_contract_deterministic
 from idp470_pipeline.exporters import export_accounting_summary_pdf, export_first_invoice_pdf, export_to_excel
@@ -33,7 +32,6 @@ LOGO_PATH = Path(os.getenv("IDP470_WEB_LOGO", PROJECT_ROOT / "assets" / "logo_ha
 JOBS_ROOT = Path(os.getenv("IDP470_WEB_JOBS_DIR", PROJECT_ROOT / "web_app" / "jobs")).expanduser()
 INPUT_ENCODING = os.getenv("IDP470_WEB_INPUT_ENCODING", "latin-1")
 CONTINUE_ON_ERROR = os.getenv("IDP470_WEB_CONTINUE_ON_ERROR", "false").strip().lower() == "true"
-FAST_EXCEL = os.getenv("IDP470_WEB_FAST_EXCEL", "true").strip().lower() == "true"
 REUSE_CONTRACT = os.getenv("IDP470_WEB_REUSE_CONTRACT", "true").strip().lower() == "true"
 
 JOBS_ROOT.mkdir(parents=True, exist_ok=True)
@@ -234,6 +232,105 @@ def _safe_media_type(path: Path) -> str:
     if suffix == ".json":
         return "application/json"
     return "application/octet-stream"
+
+
+def _sample_lines_from_payload(payload: bytes, *, max_lines: int = 250) -> list[str]:
+    try:
+        decoded = payload.decode(INPUT_ENCODING, errors="replace")
+    except Exception:  # noqa: BLE001
+        decoded = payload.decode("latin-1", errors="replace")
+
+    lines: list[str] = []
+    for raw_line in decoded.splitlines():
+        line = raw_line.rstrip("\r\n")
+        if not line.strip():
+            continue
+        lines.append(line)
+        if len(lines) >= max_lines:
+            break
+    return lines
+
+
+def _median_length(lines: list[str]) -> int:
+    lengths = sorted(len(line) for line in lines)
+    if not lengths:
+        return 0
+    center = len(lengths) // 2
+    if len(lengths) % 2 == 1:
+        return lengths[center]
+    return (lengths[center - 1] + lengths[center]) // 2
+
+
+def _selector_match_ratio(lines: list[str], contract: Any) -> float:
+    if not lines:
+        return 0.0
+    selectors: list[tuple[int, int, str]] = [
+        (record.selector.start - 1, record.selector.length, record.selector.value)
+        for record in contract.record_types
+    ]
+    matches = 0
+    for line in lines:
+        for start, length, expected in selectors:
+            end = start + length
+            if end <= len(line) and line[start:end] == expected:
+                matches += 1
+                break
+    return matches / len(lines)
+
+
+def _validate_uploaded_payload_for_profile(profile: FlowProfile, payload: bytes) -> None:
+    contract = _get_contract(profile)
+    lines = _sample_lines_from_payload(payload)
+    if not lines:
+        raise HTTPException(status_code=400, detail="Le fichier charge ne contient aucune ligne exploitable.")
+
+    median_len = _median_length(lines)
+    expected_lengths = sorted({record.max_end for record in contract.record_types})
+    max_expected = max(expected_lengths) if expected_lengths else contract.line_length
+    closest_gap = min(abs(median_len - expected) for expected in expected_lengths) if expected_lengths else abs(median_len - contract.line_length)
+    selector_ratio = _selector_match_ratio(lines, contract)
+
+    if profile.view_mode == "invoice":
+        if selector_ratio < 0.5:
+            selectors = ", ".join(sorted({record.selector.value for record in contract.record_types}))
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"Le fichier charge ne correspond pas au flux {profile.file_name}: "
+                    f"signature des enregistrements attendue ({selectors})."
+                ),
+            )
+        if closest_gap > 12:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"Le fichier charge ne correspond pas au flux {profile.file_name}: "
+                    f"longueur mediane {median_len}, attendu proche de {max_expected}."
+                ),
+            )
+        return
+
+    if len(contract.record_types) == 1:
+        tolerance = max(20, int(max_expected * 0.2))
+        if selector_ratio < 0.1 and closest_gap > tolerance:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"Le fichier charge semble incompatible avec {profile.file_name}: "
+                    f"longueur mediane {median_len}, attendu proche de {max_expected}."
+                ),
+            )
+        return
+
+    tolerance = max(24, int(max_expected * 0.25))
+    if selector_ratio < 0.1 and closest_gap > tolerance:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Le fichier charge semble incompatible avec {profile.file_name}: "
+                "aucune signature d'enregistrement detectee sur l'echantillon."
+            ),
+        )
 
 
 def _normalize_source_line(raw_line: str) -> str:
@@ -458,15 +555,6 @@ def _get_contract(profile: FlowProfile):
         return cached
 
 
-def _export_excel_fast(records: list[dict[str, Any]], output_path: Path) -> None:
-    if not records:
-        raise ValueError("Aucun enregistrement a exporter vers Excel.")
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    df = pd.DataFrame(records)
-    with pd.ExcelWriter(output_path, engine="openpyxl") as writer:
-        df.to_excel(writer, index=False, sheet_name="TOUS")
-
-
 def _process_job(job_id: str, input_path: Path, profile: FlowProfile) -> None:
     workdir = _job_dir(job_id)
     output_dir = workdir / "outputs"
@@ -504,13 +592,21 @@ def _process_job(job_id: str, input_path: Path, profile: FlowProfile) -> None:
         _set_job(
             job_id,
             progress=55,
-            message="Generation Excel rapide en cours" if FAST_EXCEL else "Generation Excel en cours",
+            message="Generation Excel en cours",
         )
         excel_path = output_dir / "parsed_records.xlsx"
-        if FAST_EXCEL:
-            _export_excel_fast(records=records, output_path=excel_path)
-        else:
-            export_to_excel(records=records, output_path=excel_path, contract=contract)
+        export_to_excel(
+            records=records,
+            output_path=excel_path,
+            contract=contract,
+            metadata={
+                "title": "IDIL PAPYRUS - Synthese de traitement",
+                "flow_type": profile.flow_type.upper(),
+                "file_name": profile.file_name,
+                "view_mode": profile.view_mode,
+                "role_label": profile.role_label,
+            },
+        )
 
         pdf_factures_path = output_dir / "facture_exemple.pdf"
         pdf_synthese_path = output_dir / "synthese_comptable.pdf"
@@ -743,6 +839,8 @@ async def create_job(
     payload = await uploaded_file.read()
     if not payload:
         raise HTTPException(status_code=400, detail=f"Le fichier {profile.file_name} est vide.")
+
+    _validate_uploaded_payload_for_profile(profile, payload)
 
     job_id = uuid.uuid4().hex[:12]
     safe_name = Path(uploaded_file.filename).name

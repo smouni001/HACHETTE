@@ -19,6 +19,7 @@ _DEFAULT_RECORD_ORDER = ["FIC", "ENT", "ECH", "COM", "REF", "ADR", "AD2", "LIG",
 _SHEET_SUMMARY = "SYNTHESE"
 _SHEET_ALL = "TOUS"
 _SHEET_DICTIONARY = "DICTIONNAIRE"
+_SHEET_CONTEXT = "CONTEXTE"
 
 
 def _record_order_map(contract: ContractSpec | None) -> dict[str, int]:
@@ -341,6 +342,7 @@ def _build_summary_sheet(
     all_df: pd.DataFrame,
     generated_at: str,
     contract: ContractSpec | None = None,
+    metadata: dict[str, Any] | None = None,
 ) -> None:
     from openpyxl.drawing.image import Image as XLImage
     from openpyxl.styles import Alignment, Font, PatternFill
@@ -349,7 +351,10 @@ def _build_summary_sheet(
     ws.sheet_view.showGridLines = False
     ws.merge_cells("A1:F1")
     ws.merge_cells("A2:F2")
-    ws["A1"] = "IDP470 - Synthese"
+    dashboard_title = "IDP470 - Synthese"
+    if metadata and metadata.get("title"):
+        dashboard_title = str(metadata["title"])
+    ws["A1"] = dashboard_title
     ws["A2"] = f"Genere le: {generated_at}"
     ws["A1"].font = Font(name="Calibri", size=16, bold=True, color="FFFFFF")
     ws["A2"].font = Font(name="Calibri", size=10, color="0B1F33")
@@ -382,9 +387,15 @@ def _build_summary_sheet(
     metric_title_font = Font(name="Calibri", size=10, color="0B1F33", bold=True)
     metric_value_font = Font(name="Calibri", size=18, color="0B1F33", bold=True)
 
+    secondary_label = "Factures"
+    secondary_value = invoice_count
+    if metadata and str(metadata.get("view_mode", "")).lower() != "invoice":
+        secondary_label = "Types d'enregistrement"
+        secondary_value = len(counts := Counter(all_df["record_type"].tolist())) if "record_type" in all_df.columns else 0
+
     cards = [
         ("A4:C4", "Total d'enregistrement", "A5:C6", total_records),
-        ("D4:F4", "Factures", "D5:F6", invoice_count),
+        ("D4:F4", secondary_label, "D5:F6", secondary_value),
     ]
     for title_range, title_text, value_range, value in cards:
         ws.merge_cells(title_range)
@@ -471,10 +482,112 @@ def _build_summary_sheet(
         ws.add_image(logo, "E1")
 
 
+def _build_context_sheet(
+    workbook,
+    *,
+    contract: ContractSpec | None,
+    generated_at: str,
+    metadata: dict[str, Any] | None = None,
+) -> None:
+    from openpyxl.styles import Alignment, Font, PatternFill
+
+    ws = workbook.create_sheet(_SHEET_CONTEXT, 1)
+    ws.sheet_view.showGridLines = False
+    ws.merge_cells("A1:E1")
+    ws.merge_cells("A2:E2")
+    ws["A1"] = "Contexte techno-fonctionnel"
+    ws["A2"] = f"Genere le: {generated_at}"
+    ws["A1"].font = Font(name="Calibri", size=14, bold=True, color="FFFFFF")
+    ws["A2"].font = Font(name="Calibri", size=10, color="0B1F33")
+    ws["A1"].fill = PatternFill(fill_type="solid", fgColor="0B1F33")
+    ws["A2"].fill = PatternFill(fill_type="solid", fgColor="EAF2FB")
+    ws["A1"].alignment = Alignment(horizontal="left", vertical="center")
+    ws["A2"].alignment = Alignment(horizontal="left", vertical="center")
+    ws.row_dimensions[1].height = 28
+    ws.row_dimensions[2].height = 20
+
+    meta = metadata or {}
+    records_count = len(contract.record_types) if contract else 0
+    fields_count = sum(len(record.fields) for record in contract.record_types) if contract else 0
+
+    rows = [
+        ("Programme source", contract.source_program if contract else ""),
+        ("Type de flux", str(meta.get("flow_type", ""))),
+        ("Fichier logique", str(meta.get("file_name", ""))),
+        ("Mode de restitution", str(meta.get("view_mode", ""))),
+        ("Role metier", str(meta.get("role_label", ""))),
+        ("Longueur de ligne", contract.line_length if contract else ""),
+        ("Validation longueur stricte", "Oui" if contract and contract.strict_length_validation else "Non"),
+        ("Validation structure stricte", "Oui" if contract and contract.strict_structure_validation else "Non"),
+        ("Types d'enregistrements", records_count),
+        ("Nombre total de champs", fields_count),
+    ]
+
+    ws["A4"] = "Attribut"
+    ws["B4"] = "Valeur"
+    ws["A4"].font = Font(bold=True, color="FFFFFF")
+    ws["B4"].font = Font(bold=True, color="FFFFFF")
+    ws["A4"].fill = PatternFill(fill_type="solid", fgColor="0F766E")
+    ws["B4"].fill = PatternFill(fill_type="solid", fgColor="0F766E")
+    ws["A4"].alignment = Alignment(horizontal="center")
+    ws["B4"].alignment = Alignment(horizontal="center")
+
+    start_row = 5
+    stripe_fill = PatternFill(fill_type="solid", fgColor="F6FAFF")
+    for offset, (label, value) in enumerate(rows):
+        row = start_row + offset
+        ws[f"A{row}"] = label
+        ws[f"B{row}"] = value
+        ws[f"A{row}"].font = Font(bold=True, color="0B1F33")
+        ws[f"B{row}"].font = Font(color="0B1F33")
+        ws[f"A{row}"].alignment = Alignment(horizontal="left", vertical="center")
+        ws[f"B{row}"].alignment = Alignment(horizontal="left", vertical="center")
+        if row % 2 == 0:
+            ws[f"A{row}"].fill = stripe_fill
+            ws[f"B{row}"].fill = stripe_fill
+
+    header_row = start_row + len(rows) + 2
+    ws[f"A{header_row}"] = "Record Type"
+    ws[f"B{header_row}"] = "Selector"
+    ws[f"C{header_row}"] = "Nb champs"
+    ws[f"D{header_row}"] = "Longueur"
+    ws[f"E{header_row}"] = "Description"
+    for col in ("A", "B", "C", "D", "E"):
+        ws[f"{col}{header_row}"].font = Font(bold=True, color="FFFFFF")
+        ws[f"{col}{header_row}"].fill = PatternFill(fill_type="solid", fgColor="0F766E")
+        ws[f"{col}{header_row}"].alignment = Alignment(horizontal="center")
+
+    if contract:
+        order_map = _record_order_map(contract)
+        ordered_records = sorted(
+            contract.record_types,
+            key=lambda record: (order_map.get(record.name, 10_000), record.name),
+        )
+        for index, record in enumerate(ordered_records, start=1):
+            row = header_row + index
+            ws[f"A{row}"] = record.name
+            ws[f"B{row}"] = record.selector.value
+            ws[f"C{row}"] = len(record.fields)
+            ws[f"D{row}"] = record.max_end
+            ws[f"E{row}"] = ""
+            ws[f"C{row}"].alignment = Alignment(horizontal="right")
+            ws[f"D{row}"].alignment = Alignment(horizontal="right")
+            if row % 2 == 0:
+                for col in ("A", "B", "C", "D", "E"):
+                    ws[f"{col}{row}"].fill = stripe_fill
+
+    ws.column_dimensions["A"].width = 34
+    ws.column_dimensions["B"].width = 24
+    ws.column_dimensions["C"].width = 14
+    ws.column_dimensions["D"].width = 14
+    ws.column_dimensions["E"].width = 56
+
+
 def export_to_excel(
     records: list[dict[str, Any]],
     output_path: Path,
     contract: ContractSpec | None = None,
+    metadata: dict[str, Any] | None = None,
 ) -> None:
     if not records:
         raise ValueError("Aucun enregistrement a exporter vers Excel.")
@@ -496,7 +609,7 @@ def export_to_excel(
         sheet_specs: list[tuple[str, pd.DataFrame, str, dict[str, str] | None]] = [
             (_SHEET_ALL, all_df, "Tous les enregistrements", all_labels or None)
         ]
-        existing_sheet_names = {_SHEET_ALL, _SHEET_SUMMARY, _SHEET_DICTIONARY}
+        existing_sheet_names = {_SHEET_ALL, _SHEET_SUMMARY, _SHEET_DICTIONARY, _SHEET_CONTEXT}
 
         if "record_type" in all_df.columns:
             grouped_map = {
@@ -542,6 +655,13 @@ def export_to_excel(
             all_df,
             generated_at=generated_at,
             contract=contract,
+            metadata=metadata,
+        )
+        _build_context_sheet(
+            writer.book,
+            contract=contract,
+            generated_at=generated_at,
+            metadata=metadata,
         )
 
         table_index = 1

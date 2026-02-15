@@ -1,0 +1,333 @@
+{
+  "samples": [
+    {
+      "filename": "sample_input_FEXCLI.txt",
+      "flow_type": "input",
+      "file_name": "FEXCLI",
+      "view_mode": "generic",
+      "role_label": "fichier metier",
+      "line_count": 1,
+      "line_length": 450,
+      "record_types": [
+        "WEXCLI"
+      ],
+      "raw_structures": [
+        "WEXCLI",
+        "ZEXCLI"
+      ]
+    },
+    {
+      "filename": "sample_input_FFAC3A.txt",
+      "flow_type": "input",
+      "file_name": "FFAC3A",
+      "view_mode": "generic",
+      "role_label": "facturation",
+      "line_count": 1,
+      "line_length": 379,
+      "record_types": [
+        "WTFAC"
+      ],
+      "raw_structures": [
+        "WTFAC",
+        "ZENRWFAC"
+      ]
+    },
+    {
+      "filename": "sample_input_FIRENT.txt",
+      "flow_type": "input",
+      "file_name": "FIRENT",
+      "view_mode": "generic",
+      "role_label": "fichier metier",
+      "line_count": 1,
+      "line_length": 186,
+      "record_types": [
+        "WENR_ENT"
+      ],
+      "raw_structures": [
+        "WENR_ENT",
+        "WZON_ENT"
+      ]
+    },
+    {
+      "filename": "sample_input_IDREFCO1.txt",
+      "flow_type": "input",
+      "file_name": "IDREFCO1",
+      "view_mode": "generic",
+      "role_label": "interface",
+      "line_count": 1,
+      "line_length": 40,
+      "record_types": [
+        "FD_IDREFCO1",
+        "FD_IDREFCO1_B"
+      ],
+      "raw_structures": [
+        "FD_IDREFCO1",
+        "FD_IDREFCO1_B"
+      ]
+    },
+    {
+      "filename": "sample_output_CANADA4P.txt",
+      "flow_type": "output",
+      "file_name": "CANADA4P",
+      "view_mode": "generic",
+      "role_label": "fichier metier",
+      "line_count": 1,
+      "line_length": 41,
+      "record_types": [
+        "WCAN4P"
+      ],
+      "raw_structures": [
+        "WCAN4P"
+      ]
+    },
+    {
+      "filename": "sample_output_EXPOHARR.txt",
+      "flow_type": "output",
+      "file_name": "EXPOHARR",
+      "view_mode": "generic",
+      "role_label": "export",
+      "line_count": 1,
+      "line_length": 509,
+      "record_types": [
+        "WEXPO"
+      ],
+      "raw_structures": [
+        "WEXPO"
+      ]
+    },
+    {
+      "filename": "sample_output_FEDITI.txt",
+      "flow_type": "output",
+      "file_name": "FEDITI",
+      "view_mode": "generic",
+      "role_label": "journalisation",
+      "line_count": 3,
+      "line_length": 468,
+      "record_types": [
+        "WTBOR",
+        "WANOT",
+        "WJOUR",
+        "WJOUF"
+      ],
+      "raw_structures": [
+        "WANOT",
+        "WJOUF",
+        "WJOUR",
+        "WTBOR"
+      ]
+    },
+    {
+      "filename": "sample_output_FICDEMA.txt",
+      "flow_type": "output",
+      "file_name": "FICDEMA",
+      "view_mode": "invoice",
+      "role_label": "facturation",
+      "line_count": 8,
+      "line_length": 1200,
+      "record_types": [
+        "FIC",
+        "ENT",
+        "ECH",
+        "COM",
+        "REF",
+        "ADR",
+        "AD2",
+        "LIG",
+        "LEC",
+        "PIE"
+      ],
+      "raw_structures": [
+        "DEMAT_AD2",
+        "DEMAT_ADR",
+        "DEMAT_COM",
+        "DEMAT_ECH",
+        "DEMAT_ENT",
+        "DEMAT_LEC",
+        "DEMAT_LIG",
+        "DEMAT_PIE",
+        "DEMAT_REF",
+        "SVG_DEMAT_ATM",
+        "SVG_DEMAT_COLIS"
+      ]
+    },
+    {
+      "filename": "sample_output_FICLCOM.txt",
+      "flow_type": "output",
+      "file_name": "FICLCOM",
+      "view_mode": "generic",
+      "role_label": "journalisation",
+      "line_count": 1,
+      "line_length": 229,
+      "record_types": [
+        "LOG_COM"
+      ],
+      "raw_structures": [
+        "LOG_COM"
+      ]
+    },
+    {
+      "filename": "sample_output_FICSTOD.txt",
+      "flow_type": "output",
+      "file_name": "FICSTOD",
+      "view_mode": "invoice",
+      "role_label": "facturation",
+      "line_count": 8,
+      "line_length": 1200,
+      "record_types": [
+        "FIC",
+        "ENT",
+        "ECH",
+        "COM",
+        "REF",
+        "ADR",
+        "AD2",
+        "LIG",
+        "LEC",
+        "PIE"
+      ],
+      "raw_structures": [
+        "STO_D_AD2",
+        "STO_D_ADR",
+        "STO_D_COM",
+        "STO_D_ECH",
+        "STO_D_ENT",
+        "STO_D_LEC",
+        "STO_D_LIG",
+        "STO_D_PIE",
+        "STO_D_REF",
+        "SVG_STO_D_ATM",
+        "SVG_STO_D_COLIS"
+      ]
+    },
+    {
+      "filename": "sample_output_FICSTOP.txt",
+      "flow_type": "output",
+      "file_name": "FICSTOP",
+      "view_mode": "generic",
+      "role_label": "stockage",
+      "line_count": 1,
+      "line_length": 206,
+      "record_types": [
+        "STO_P_GEN"
+      ],
+      "raw_structures": [
+        "STO_P_GEN"
+      ]
+    },
+    {
+      "filename": "sample_output_FIPAGE.txt",
+      "flow_type": "output",
+      "file_name": "FIPAGE",
+      "view_mode": "generic",
+      "role_label": "indexation",
+      "line_count": 1,
+      "line_length": 66,
+      "record_types": [
+        "WIPAG"
+      ],
+      "raw_structures": [
+        "WIPAG"
+      ]
+    },
+    {
+      "filename": "sample_output_FMICRO.txt",
+      "flow_type": "output",
+      "file_name": "FMICRO",
+      "view_mode": "generic",
+      "role_label": "fichier metier",
+      "line_count": 1,
+      "line_length": 175,
+      "record_types": [
+        "WTMIC"
+      ],
+      "raw_structures": [
+        "WTMIC"
+      ]
+    },
+    {
+      "filename": "sample_output_FRESUL.txt",
+      "flow_type": "output",
+      "file_name": "FRESUL",
+      "view_mode": "generic",
+      "role_label": "fichier metier",
+      "line_count": 1,
+      "line_length": 377,
+      "record_types": [
+        "WRESL",
+        "WRESP"
+      ],
+      "raw_structures": [
+        "WRESL",
+        "WRESP"
+      ]
+    },
+    {
+      "filename": "sample_output_IDDPCFEN.txt",
+      "flow_type": "output",
+      "file_name": "IDDPCFEN",
+      "view_mode": "generic",
+      "role_label": "facturation",
+      "line_count": 1,
+      "line_length": 66,
+      "record_types": [
+        "PEN_ENTET"
+      ],
+      "raw_structures": [
+        "PEN_ENTET"
+      ]
+    },
+    {
+      "filename": "sample_output_IDDPCFIN.txt",
+      "flow_type": "output",
+      "file_name": "IDDPCFIN",
+      "view_mode": "generic",
+      "role_label": "indexation",
+      "line_count": 1,
+      "line_length": 25,
+      "record_types": [
+        "PIN_INDEX"
+      ],
+      "raw_structures": [
+        "PIN_INDEX"
+      ]
+    },
+    {
+      "filename": "sample_output_IDDPCFLI.txt",
+      "flow_type": "output",
+      "file_name": "IDDPCFLI",
+      "view_mode": "generic",
+      "role_label": "facturation",
+      "line_count": 1,
+      "line_length": 292,
+      "record_types": [
+        "PLI_LIGNE",
+        "PLI_LIGNE_R",
+        "PLIB_LIGNE",
+        "PLIB_LIGNE_R"
+      ],
+      "raw_structures": [
+        "PLIB_LIGNE",
+        "PLIB_LIGNE_R",
+        "PLI_LIGNE",
+        "PLI_LIGNE_R"
+      ]
+    },
+    {
+      "filename": "sample_output_IDPIEDF5.txt",
+      "flow_type": "output",
+      "file_name": "IDPIEDF5",
+      "view_mode": "generic",
+      "role_label": "facturation",
+      "line_count": 1,
+      "line_length": 64,
+      "record_types": [
+        "FD_IDPIEDF5",
+        "FD_IDPIEDF5_B"
+      ],
+      "raw_structures": [
+        "FD_IDPIEDF5",
+        "FD_IDPIEDF5_B"
+      ]
+    }
+  ]
+}
