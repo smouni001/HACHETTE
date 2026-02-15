@@ -13,6 +13,8 @@ Exemples:
 - `output + FICDEMA` -> `sample_output_FICDEMA.txt`
 - `output + FICLCOM` -> `sample_output_FICLCOM.txt`
 - `input + FFAC3A` -> `sample_input_FFAC3A.txt`
+- `input + FTRDA (IDP470F2)` -> `sample_input_FTRDA_IDP470F2.txt`
+- `output + FTRSQ (IDP470F2)` -> `sample_output_FTRSQ_IDP470F2.txt`
 
 ## Manifest
 

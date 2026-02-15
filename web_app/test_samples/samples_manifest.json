@@ -1,6 +1,40 @@
 {
   "samples": [
     {
+      "filename": "sample_input_FTRDA_IDP470F2.txt",
+      "flow_type": "input",
+      "file_name": "FTRDA",
+      "view_mode": "generic",
+      "role_label": "stockage",
+      "line_count": 3,
+      "line_length": 8000,
+      "record_types": [
+        "BUFTR"
+      ],
+      "raw_structures": [
+        "BUFTR"
+      ],
+      "program": "IDP470F2",
+      "note": "Exemple technique base sur RECSIZE/BLKSIZE=8000 (stockage brut)."
+    },
+    {
+      "filename": "sample_output_FTRSQ_IDP470F2.txt",
+      "flow_type": "output",
+      "file_name": "FTRSQ",
+      "view_mode": "generic",
+      "role_label": "stockage",
+      "line_count": 3,
+      "line_length": 8000,
+      "record_types": [
+        "BUFTR"
+      ],
+      "raw_structures": [
+        "BUFTR"
+      ],
+      "program": "IDP470F2",
+      "note": "Exemple technique base sur RECSIZE/BLKSIZE=8000 (stockage brut)."
+    },
+    {
       "filename": "sample_input_FEXCLI.txt",
       "flow_type": "input",
       "file_name": "FEXCLI",
