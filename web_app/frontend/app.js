@@ -50,7 +50,11 @@ let knownPrograms = [];
 let catalogProfiles = [];
 let localProgramId = null;
 let completionNotifiedForJob = null;
+let lastCatalogFailureMessage = "";
+let lastCatalogFailureKind = "";
+let lastStableState = null;
 const noticeHistory = new Map();
+const PRIMARY_PROGRAM_ID = "idp470ra";
 const CATALOG_CACHE_TTL_MS = 5 * 60 * 1000;
 const LOCAL_PROGRAM_OPTION_VALUE = "__local_program__";
 const CATALOG_REQUEST_TIMEOUT_MS = 25000;
@@ -313,6 +317,81 @@ function currentProgramId() {
     return String(localProgramId || "").toLowerCase();
   }
   return String(programSelect?.value || knownPrograms?.[0]?.program_id || "idp470ra").toLowerCase();
+}
+
+function isPrimaryProgram(programId) {
+  return String(programId || "").toLowerCase() === PRIMARY_PROGRAM_ID;
+}
+
+function cloneProfiles(profiles) {
+  return Array.isArray(profiles) ? JSON.parse(JSON.stringify(profiles)) : [];
+}
+
+function captureUiState() {
+  return {
+    programSelectValue: String(programSelect?.value || ""),
+    localProgramId: localProgramId ? String(localProgramId) : null,
+    advancedMode: isAdvancedModeEnabled(),
+    flowTypeValue: String(flowTypeSelect?.value || "").toLowerCase(),
+    fileNameValue: String(fileNameSelect?.value || "").toUpperCase(),
+    catalogProfiles: cloneProfiles(catalogProfiles),
+    catalogSourceProgram: String(catalogSourceProgram || "programme"),
+    catalogStatusText: String(catalogStatus?.textContent || ""),
+    localProgramStatusText: String(localProgramStatus?.textContent || ""),
+  };
+}
+
+function removeKnownProgram(programId) {
+  const safeId = String(programId || "").toLowerCase();
+  if (!safeId) {
+    return;
+  }
+  knownPrograms = knownPrograms.filter((item) => String(item?.program_id || "").toLowerCase() !== safeId);
+}
+
+function restoreUiState(snapshot, options = {}) {
+  if (!snapshot) {
+    return;
+  }
+  const removeProgramId = String(options.removeProgramId || "").toLowerCase();
+  if (removeProgramId) {
+    removeKnownProgram(removeProgramId);
+  }
+
+  localProgramId = snapshot.localProgramId ? String(snapshot.localProgramId).toLowerCase() : null;
+  rebuildProgramOptions(snapshot.programSelectValue || PRIMARY_PROGRAM_ID);
+  programSelect.value = snapshot.programSelectValue || PRIMARY_PROGRAM_ID;
+  advancedModeToggle.checked = Boolean(snapshot.advancedMode);
+  setAdvancedModeIndicator();
+  toggleLocalProgramPanel(isLocalProgramSelection());
+
+  catalogSourceProgram = snapshot.catalogSourceProgram || "programme";
+  catalogProfiles = cloneProfiles(snapshot.catalogProfiles);
+  if (catalogProfiles.length > 0) {
+    loadFlowOptions(snapshot.flowTypeValue || "output", snapshot.fileNameValue || "FICDEMA");
+  } else {
+    flowTypeSelect.innerHTML = "";
+    fileNameSelect.innerHTML = "";
+    renderProfileContext(null);
+    launchBtn.disabled = true;
+  }
+
+  if (snapshot.catalogStatusText) {
+    setCatalogStatus(snapshot.catalogStatusText);
+  }
+  if (snapshot.localProgramStatusText) {
+    setLocalProgramStatus(snapshot.localProgramStatusText);
+  }
+}
+
+function applyProgramModeDefault(programId) {
+  if (!programId) {
+    return;
+  }
+  if (!isPrimaryProgram(programId)) {
+    advancedModeToggle.checked = true;
+    setAdvancedModeIndicator();
+  }
 }
 
 function cacheKeyForCatalog(programId, advancedMode) {
@@ -880,17 +959,27 @@ function loadFlowOptions(defaultFlowType = "output", defaultFileName = "FICDEMA"
   rebuildFileOptions(defaultFileName);
 }
 
-async function loadCatalog(preferredSelection = null) {
+async function loadCatalog(preferredSelection = null, options = {}) {
+  const allowFallback = options.allowFallback !== undefined ? Boolean(options.allowFallback) : true;
+  const silentNoFlowNotice = Boolean(options.silentNoFlowNotice);
+  const silentFailureNotice = Boolean(options.silentFailureNotice);
+  lastCatalogFailureKind = "";
+  lastCatalogFailureMessage = "";
+
   const programId = currentProgramId();
+  const primaryProgram = isPrimaryProgram(programId);
   if (isLocalProgramSelection() && !programId) {
     catalogProfiles = [];
     flowTypeSelect.innerHTML = "";
     fileNameSelect.innerHTML = "";
     renderProfileContext(null);
     launchBtn.disabled = true;
-    setCatalogStatus("Chargez d'abord un programme local, puis lancez l'analyse.");
-    return;
+    lastCatalogFailureKind = "missing_program";
+    lastCatalogFailureMessage = "Chargez d'abord un programme local, puis lancez l'analyse.";
+    setCatalogStatus(lastCatalogFailureMessage);
+    return false;
   }
+
   const advancedMode = isAdvancedModeEnabled();
   setCatalogStatus("Analyse des flux du programme en cours...", true);
   try {
@@ -915,18 +1004,56 @@ async function loadCatalog(preferredSelection = null) {
       const noFlowMessage =
         `Aucun flux exploitable detecte pour ${catalogSourceProgram}. ` +
         "Verifiez votre selection de programme ou la source chargee.";
+      lastCatalogFailureKind = "no_flow";
+      lastCatalogFailureMessage = noFlowMessage;
       setCatalogStatus(noFlowMessage);
-      notifyNoFlow(catalogSourceProgram);
-      return;
+      if (!silentNoFlowNotice) {
+        if (primaryProgram) {
+          notifyNoFlow(catalogSourceProgram);
+        } else {
+          openModal({
+            type: "error",
+            title: "Aucun fichier detecte",
+            message: noFlowMessage,
+            primaryLabel: "Fermer",
+          });
+        }
+      }
+      return false;
     }
     const preferredFlow = String(preferredSelection?.flow_type || payload.default_flow_type || "output").toLowerCase();
     const preferredFile = String(preferredSelection?.file_name || payload.default_file_name || "FICDEMA").toUpperCase();
-    loadFlowOptions(
-      preferredFlow,
-      preferredFile,
-    );
+    loadFlowOptions(preferredFlow, preferredFile);
     setCatalogStatus(formatCatalogReadyMessage(catalogProfiles.length, advancedMode, catalogSourceProgram));
+    lastStableState = captureUiState();
+    return true;
   } catch (error) {
+    const timeout = String(error?.name || "") === "AbortError";
+    const failureMessage = timeout
+      ? "Le chargement du catalogue a depasse le delai. Verifiez le programme source puis relancez."
+      : `Impossible de charger les flux pour ${catalogSourceProgram || programId || "le programme selectionne"}.`;
+
+    lastCatalogFailureKind = "error";
+    lastCatalogFailureMessage = failureMessage;
+
+    if (!allowFallback || !primaryProgram) {
+      catalogProfiles = [];
+      flowTypeSelect.innerHTML = "";
+      fileNameSelect.innerHTML = "";
+      renderProfileContext(null);
+      launchBtn.disabled = true;
+      setCatalogStatus(failureMessage);
+      if (!silentFailureNotice) {
+        openModal({
+          type: "error",
+          title: "Chargement programme impossible",
+          message: failureMessage,
+          primaryLabel: "Fermer",
+        });
+      }
+      return false;
+    }
+
     fallbackCatalog();
     if (preferredSelection) {
       loadFlowOptions(preferredSelection.flow_type, preferredSelection.file_name);
@@ -934,7 +1061,7 @@ async function loadCatalog(preferredSelection = null) {
       loadFlowOptions("output", "FICDEMA");
     }
     setError("Catalogue non charge. Mode de secours active.");
-    if (String(error?.name || "") === "AbortError") {
+    if (timeout) {
       setError("Le chargement du catalogue a depasse le delai. Verifiez le programme source puis relancez.");
     }
     setCatalogStatus(
@@ -945,6 +1072,8 @@ async function loadCatalog(preferredSelection = null) {
       title: "Catalogue en mode secours",
       message: "Le catalogue principal n'est pas joignable. Verification structurelle limitee.",
     });
+    lastStableState = captureUiState();
+    return true;
   }
 }
 
@@ -976,7 +1105,7 @@ fileNameSelect.addEventListener("change", () => {
   updateUploadLabel();
 });
 
-programSelect.addEventListener("change", () => {
+programSelect.addEventListener("change", async () => {
   setError("");
   const localSelected = isLocalProgramSelection();
   toggleLocalProgramPanel(localSelected);
@@ -989,19 +1118,78 @@ programSelect.addEventListener("change", () => {
     setCatalogStatus("Mode programme local: chargez et analysez votre source pour afficher les flux.");
     return;
   }
-  loadCatalog();
+
+  const nextProgramId = currentProgramId();
+  applyProgramModeDefault(nextProgramId);
+  const strictCatalogMode = !isPrimaryProgram(nextProgramId);
+  const loaded = await loadCatalog(null, {
+    allowFallback: !strictCatalogMode,
+    silentNoFlowNotice: strictCatalogMode,
+    silentFailureNotice: strictCatalogMode,
+  });
+  if (!loaded && strictCatalogMode) {
+    const reason = lastCatalogFailureMessage || "Aucun flux exploitable n'a ete detecte.";
+    if (lastStableState) {
+      restoreUiState(lastStableState);
+      openModal({
+        type: "error",
+        title: "Chargement programme impossible",
+        message: `${reason} Retour a l'etat precedent.`,
+        primaryLabel: "Compris",
+      });
+      return;
+    }
+    openModal({
+      type: "error",
+      title: "Chargement programme impossible",
+      message: reason,
+      primaryLabel: "Fermer",
+    });
+  }
 });
 
 loadLocalProgramBtn.addEventListener("click", async () => {
+  const snapshotBeforeLoad = captureUiState();
   const newProgramId = await registerLocalProgram();
   if (!newProgramId) {
     return;
   }
   toggleLocalProgramPanel(true);
-  await loadCatalog();
+  applyProgramModeDefault(newProgramId);
+  const strictCatalogMode = !isPrimaryProgram(newProgramId);
+  const loaded = await loadCatalog(null, {
+    allowFallback: !strictCatalogMode,
+    silentNoFlowNotice: strictCatalogMode,
+    silentFailureNotice: strictCatalogMode,
+  });
+
+  if (!loaded && strictCatalogMode) {
+    const reason =
+      lastCatalogFailureMessage ||
+      `Aucun fichier exploitable n'a ete detecte pour ${String(newProgramId).toUpperCase()}.`;
+    restoreUiState(snapshotBeforeLoad, { removeProgramId: newProgramId });
+    openModal({
+      type: "error",
+      title: "Programme sans flux exploitable",
+      message: `${reason} Retour a l'etat precedent.`,
+      primaryLabel: "Compris",
+    });
+  }
 });
 
 advancedModeToggle.addEventListener("change", () => {
+  const selectedProgramId = currentProgramId();
+  if (!isPrimaryProgram(selectedProgramId) && !advancedModeToggle.checked) {
+    advancedModeToggle.checked = true;
+    setAdvancedModeIndicator();
+    showToast({
+      type: "info",
+      title: "Mode avance maintenu",
+      message: "Pour ce programme, l'analyse est forcee en mode avance.",
+    });
+    return;
+  }
+
   setAdvancedModeIndicator();
   const currentSelection = {
     flow_type: String(flowTypeSelect.value || "output").toLowerCase(),
@@ -1082,6 +1270,7 @@ form.addEventListener("submit", async (event) => {
 (async function initCatalog() {
   setAdvancedModeIndicator();
   const selectedProgramId = await loadPrograms();
+  applyProgramModeDefault(selectedProgramId);
   toggleLocalProgramPanel(isLocalProgramSelection());
   const selectedProgram = knownPrograms.find((item) => item.program_id === selectedProgramId);
   catalogSourceProgram = selectedProgram?.source_program || "programme";
