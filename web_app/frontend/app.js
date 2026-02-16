@@ -607,13 +607,25 @@ function upsertProgram(program) {
   knownPrograms.push({ ...program, program_id: normalizedId });
 }
 
+function programLabel(program) {
+  const sourceProgram = String(program?.source_program || "").trim();
+  if (sourceProgram) {
+    return sourceProgram;
+  }
+  const displayName = String(program?.display_name || "").trim();
+  if (displayName) {
+    return displayName;
+  }
+  return String(program?.program_id || "-").trim() || "-";
+}
+
 function rebuildProgramOptions(defaultProgramId = "idp470ra") {
   const wanted = String(defaultProgramId || "idp470ra").toLowerCase();
   programSelect.innerHTML = "";
   knownPrograms.forEach((item) => {
     const option = document.createElement("option");
     option.value = item.program_id;
-    option.textContent = `${item.display_name || item.program_id} (${item.source_program || "-"})`;
+    option.textContent = programLabel(item);
     programSelect.appendChild(option);
   });
   const localOption = document.createElement("option");
@@ -658,7 +670,7 @@ async function registerLocalProgram() {
     upsertProgram(program);
     rebuildProgramOptions(localProgramId);
     setLocalProgramStatus(
-      `Programme local charge: ${program.display_name} (${program.source_program}). Analyse des flux en cours...`,
+      `Programme local charge: ${programLabel(program)}. Analyse des flux en cours...`,
     );
     return localProgramId;
   } catch (error) {
@@ -1094,7 +1106,8 @@ async function loadCatalog(preferredSelection = null, options = {}) {
     }
     const payload = await response.json();
     if (payload?.program_display_name) {
-      setLocalProgramStatus(`Programme actif: ${payload.program_display_name} (${payload.source_program || "-"})`);
+      const activeLabel = String(payload.source_program || payload.program_display_name || "-");
+      setLocalProgramStatus(`Programme actif: ${activeLabel}`);
     }
     writeCatalogCache(programId, advancedMode, payload);
     catalogSourceProgram = payload?.source_program || "programme";
@@ -1272,9 +1285,7 @@ loadLocalProgramBtn.addEventListener("click", async () => {
   const activeProgram = currentProgramConfig();
   const sourceProgram = activeProgram?.source_program || String(newProgramId).toUpperCase();
   const flowCount = Array.isArray(catalogProfiles) ? catalogProfiles.length : 0;
-  setLocalProgramStatus(
-    `Programme local analyse: ${activeProgram?.display_name || sourceProgram} (${sourceProgram}). ${flowCount} flux detecte(s).`,
-  );
+  setLocalProgramStatus(`Programme local analyse: ${sourceProgram}. ${flowCount} flux detecte(s).`);
   showToast({
     type: "success",
     title: "Programme local analyse",
