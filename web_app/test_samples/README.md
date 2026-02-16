@@ -16,6 +16,10 @@ Exemples:
 - `input + FTRDA (IDP470F2)` -> `sample_input_FTRDA_IDP470F2.txt`
 - `output + FTRSQ (IDP470F2)` -> `sample_output_FTRSQ_IDP470F2.txt`
 
+Programme source COBOL de test:
+
+- `sample_cobol_program.cbl` (a charger dans "Programme local")
+
 ## Manifest
 
 Le fichier `samples_manifest.json` contient:

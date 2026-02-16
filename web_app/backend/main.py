@@ -37,8 +37,8 @@ LOCAL_PROGRAMS_ROOT = JOBS_ROOT / "_program_sources"
 DEFAULT_INPUT_ENCODING = os.getenv("IDP470_WEB_INPUT_ENCODING", "latin-1")
 DEFAULT_CONTINUE_ON_ERROR = os.getenv("IDP470_WEB_CONTINUE_ON_ERROR", "false").strip().lower() == "true"
 DEFAULT_REUSE_CONTRACT = os.getenv("IDP470_WEB_REUSE_CONTRACT", "true").strip().lower() == "true"
-SUPPORTED_ANALYZERS = {"idp470_pli"}
-ALLOWED_SOURCE_SUFFIXES = {".pli", ".cbl", ".jcl", ".txt"}
+SUPPORTED_ANALYZERS = {"idp470_pli", "cobol_copybook"}
+ALLOWED_SOURCE_SUFFIXES = {".pli", ".cbl", ".cob", ".cpy", ".jcl", ".txt"}
 
 JOBS_ROOT.mkdir(parents=True, exist_ok=True)
 LOCAL_PROGRAMS_ROOT.mkdir(parents=True, exist_ok=True)
@@ -163,6 +163,19 @@ _BASED_ADDR_RE = re.compile(
 )
 _COMMENT_RE = re.compile(r"/\*(.*?)\*/")
 _TRAILING_SEQ_RE = re.compile(r"\s+\d{5,}\s*$")
+_COBOL_INLINE_COMMENT_RE = re.compile(r"\*>.*$")
+_COBOL_SELECT_RE = re.compile(r"\bSELECT\s+([A-Z0-9-]+)\b", re.IGNORECASE)
+_COBOL_FD_RE = re.compile(r"^\s*FD\s+([A-Z0-9-]+)\b", re.IGNORECASE)
+_COBOL_LEVEL_01_RE = re.compile(r"^\s*01\s+([A-Z0-9-]+)\b", re.IGNORECASE)
+_COBOL_READ_RE = re.compile(
+    r"\bREAD\s+([A-Z0-9-]+)(?:\s+INTO\s+([A-Z0-9-]+))?",
+    re.IGNORECASE,
+)
+_COBOL_WRITE_RE = re.compile(
+    r"\bWRITE\s+([A-Z0-9-]+)(?:\s+FROM\s+([A-Z0-9-]+))?",
+    re.IGNORECASE,
+)
+_COBOL_WORD_RE = re.compile(r"[A-Z0-9-]+", re.IGNORECASE)
 
 
 _JOBS: dict[str, JobState] = {}
@@ -407,6 +420,13 @@ def _safe_media_type(path: Path) -> str:
     return "application/octet-stream"
 
 
+def _infer_analyzer_from_suffix(suffix: str) -> str:
+    normalized = (suffix or "").strip().lower()
+    if normalized in {".cbl", ".cob", ".cpy"}:
+        return "cobol_copybook"
+    return "idp470_pli"
+
+
 def _sample_lines_from_payload(payload: bytes, *, input_encoding: str, max_lines: int = 250) -> list[str]:
     try:
         decoded = payload.decode(input_encoding, errors="replace")
@@ -592,6 +612,21 @@ def _normalize_source_line(raw_line: str) -> str:
     return line.rstrip()
 
 
+def _normalize_cobol_source_line(raw_line: str) -> str:
+    line = raw_line.rstrip("\r\n")
+    if not line.strip():
+        return ""
+
+    if len(line) >= 7:
+        indicator = line[6]
+        if indicator in {"*", "/"}:
+            return ""
+        line = line[7:]
+
+    line = _COBOL_INLINE_COMMENT_RE.sub("", line)
+    return line.rstrip()
+
+
 def _extract_inline_comment(line: str) -> str | None:
     match = _COMMENT_RE.search(line)
     if not match:
@@ -621,8 +656,142 @@ def _infer_role_label(*, file_name: str, description: str, structures: tuple[str
     return "fichier metier"
 
 
-def _discover_flow_profiles(program: ProgramRuntime) -> dict[tuple[str, str], FlowProfile]:
-    text = program.source_path.read_text(encoding=program.source_encoding)
+def _flow_from_open_mode(mode: str) -> str:
+    normalized = mode.upper()
+    if normalized in {"OUTPUT", "EXTEND"}:
+        return "output"
+    return "input"
+
+
+def _discover_flow_profiles_cobol(program: ProgramRuntime, text: str) -> dict[tuple[str, str], FlowProfile]:
+    declarations: dict[str, tuple[str, str]] = {}
+    file_to_structures: dict[str, set[str]] = defaultdict(set)
+    flow_by_file: dict[str, str] = {}
+    record_to_file: dict[str, str] = {}
+    current_fd_file: str | None = None
+
+    for raw_line in text.splitlines():
+        line = _normalize_cobol_source_line(raw_line)
+        if not line:
+            continue
+        upper = line.upper()
+
+        fd_match = _COBOL_FD_RE.match(upper)
+        if fd_match:
+            current_fd_file = fd_match.group(1).upper()
+            declarations.setdefault(current_fd_file, ("input", f"Flux input {current_fd_file}"))
+            continue
+
+        level_01_match = _COBOL_LEVEL_01_RE.match(upper)
+        if level_01_match and current_fd_file:
+            record_name = level_01_match.group(1).upper()
+            file_to_structures[current_fd_file].add(record_name)
+            record_to_file[record_name] = current_fd_file
+            continue
+
+        if upper.strip().startswith("SELECT "):
+            select_match = _COBOL_SELECT_RE.search(upper)
+            if select_match:
+                file_name = select_match.group(1).upper()
+                declarations.setdefault(file_name, ("input", f"Flux input {file_name}"))
+
+        for read_match in _COBOL_READ_RE.finditer(upper):
+            file_token = read_match.group(1).upper()
+            into_token = read_match.group(2).upper() if read_match.group(2) else ""
+            file_name = record_to_file.get(file_token, file_token)
+            declarations.setdefault(file_name, ("input", f"Flux input {file_name}"))
+            flow_by_file[file_name] = "input"
+            if into_token:
+                file_to_structures[file_name].add(into_token)
+
+        for write_match in _COBOL_WRITE_RE.finditer(upper):
+            first_token = write_match.group(1).upper()
+            from_token = write_match.group(2).upper() if write_match.group(2) else ""
+            file_name = record_to_file.get(first_token)
+            if not file_name and from_token:
+                file_name = record_to_file.get(from_token)
+            if not file_name:
+                file_name = first_token
+
+            declarations.setdefault(file_name, ("output", f"Flux output {file_name}"))
+            flow_by_file[file_name] = "output"
+            if first_token in record_to_file:
+                file_to_structures[file_name].add(first_token)
+            if from_token:
+                file_to_structures[file_name].add(from_token)
+
+        tokens = _COBOL_WORD_RE.findall(upper.replace(".", " "))
+        if tokens and tokens[0] == "OPEN":
+            mode = ""
+            for token in tokens[1:]:
+                if token in {"INPUT", "OUTPUT", "I-O", "EXTEND"}:
+                    mode = token
+                    continue
+                if not mode:
+                    continue
+                file_name = token.upper()
+                flow_type = _flow_from_open_mode(mode)
+                declarations.setdefault(file_name, (flow_type, f"Flux {flow_type} {file_name}"))
+                if flow_by_file.get(file_name) != "output":
+                    flow_by_file[file_name] = flow_type
+
+    for file_name in file_to_structures.keys():
+        declarations.setdefault(file_name, ("input", f"Flux input {file_name}"))
+
+    profiles: dict[tuple[str, str], FlowProfile] = {}
+    for file_name, (default_flow, description) in sorted(declarations.items()):
+        flow_type = flow_by_file.get(file_name, default_flow)
+        structures = tuple(sorted(file_to_structures.get(file_name, set())))
+        invoice_mode = any(name.startswith("DEMAT_") or name.startswith("STO_D_") for name in structures)
+
+        structure_prefixes: tuple[str, ...] = ()
+        structure_names: tuple[str, ...] = structures
+        preserve_structure_names = True
+        apply_idil_rules = False
+        strict_length_validation = False
+        supports_pdf = False
+        role_label = _infer_role_label(file_name=file_name, description=description, structures=structures)
+        view_mode = "generic"
+
+        if invoice_mode:
+            prefixes: list[str] = []
+            if any(name.startswith("DEMAT_") for name in structures):
+                prefixes.append("DEMAT_")
+            if any(name.startswith("STO_D_") for name in structures):
+                prefixes.append("STO_D_")
+            structure_prefixes = tuple(prefixes)
+            structure_names = ()
+            preserve_structure_names = False
+            apply_idil_rules = True
+            strict_length_validation = True
+            supports_pdf = True
+            role_label = "facturation"
+            view_mode = "invoice"
+
+        supports_processing = bool(structure_prefixes or structure_names)
+        profiles[(flow_type, file_name)] = FlowProfile(
+            program_id=program.program_id,
+            source_program=program.source_program,
+            flow_type=flow_type,
+            file_name=file_name,
+            display_name=file_name,
+            description=description,
+            role_label=role_label,
+            view_mode=view_mode,
+            structure_prefixes=structure_prefixes,
+            structure_names=structure_names,
+            preserve_structure_names=preserve_structure_names,
+            apply_idil_rules=apply_idil_rules,
+            supports_pdf=supports_pdf,
+            supports_processing=supports_processing,
+            strict_length_validation=strict_length_validation,
+            raw_structures=structures,
+        )
+
+    return profiles
+
+
+def _discover_flow_profiles_pli(program: ProgramRuntime, text: str) -> dict[tuple[str, str], FlowProfile]:
     declarations: dict[str, tuple[str, str]] = {}
     file_to_structures: dict[str, set[str]] = defaultdict(set)
     aliases_by_base: dict[str, set[str]] = defaultdict(set)
@@ -718,6 +887,13 @@ def _discover_flow_profiles(program: ProgramRuntime) -> dict[tuple[str, str], Fl
         )
 
     return profiles
+
+
+def _discover_flow_profiles(program: ProgramRuntime) -> dict[tuple[str, str], FlowProfile]:
+    text = program.source_path.read_text(encoding=program.source_encoding)
+    if program.analyzer_engine == "cobol_copybook":
+        return _discover_flow_profiles_cobol(program, text)
+    return _discover_flow_profiles_pli(program, text)
 
 
 def _get_flow_profiles(program_id: str) -> dict[tuple[str, str], FlowProfile]:
@@ -833,6 +1009,7 @@ def _build_contract(program: ProgramRuntime, profile: FlowProfile):
             structure_names=set(profile.structure_names) if profile.structure_names else None,
             preserve_structure_names=profile.preserve_structure_names,
             apply_idil_rules=profile.apply_idil_rules,
+            engine=program.analyzer_engine,
         )
     except ValueError as error:
         message = str(error)
@@ -1176,6 +1353,7 @@ async def register_local_program(
     if suffix not in ALLOWED_SOURCE_SUFFIXES:
         allowed = ", ".join(sorted(ALLOWED_SOURCE_SUFFIXES))
         raise HTTPException(status_code=400, detail=f"Format non supporte ({suffix}). Formats autorises: {allowed}")
+    analyzer_engine = _infer_analyzer_from_suffix(suffix)
 
     payload = await source_file.read()
     if not payload:
@@ -1200,7 +1378,7 @@ async def register_local_program(
         source_program=source_program_name,
         source_path=target_path,
         source_encoding=effective_encoding,
-        analyzer_engine="idp470_pli",
+        analyzer_engine=analyzer_engine,
         spec_pdf_path=resolved_spec_pdf_path,
         invoice_only_default=invoice_only_default,
         default_flow_type="output",

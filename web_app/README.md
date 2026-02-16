@@ -81,7 +81,7 @@ Le catalogue retourne pour chaque fichier:
   - rendu conditionnel facture/non-facture
 - Backend:
   - registre de programmes JSON (`web_app/programs/*.json`)
-  - moteur d'analyse abstrait via champ `analyzer.engine` (actuel: `idp470_pli`)
+  - moteur d'analyse abstrait via champ `analyzer.engine` (actuels: `idp470_pli`, `cobol_copybook`)
   - extraction structurelle dynamique depuis le programme choisi
   - validation anti-erreur avant parsing (bloque les donnees non conformes)
   - parsing/export generique pilote par contrat
@@ -115,6 +115,8 @@ Exemple minimal:
 }
 ```
 
+Pour un programme COBOL, utilisez `\"engine\": \"cobol_copybook\"` dans `analyzer`.
+
 ## 4.4) Logique de validation fichier charge
 
 Avant tout parsing, le backend compare le contenu charge avec la structure attendue:
@@ -130,7 +132,7 @@ Si la correspondance echoue, le job est bloque avec erreur explicite.
 
 - Le programme principal reste `IDP470RA` (selection par defaut).
 - Depuis l'UI, vous pouvez choisir `Charger un programme local...`.
-- Chargez un source local (`.pli`, `.cbl`, `.jcl`, `.txt`) puis cliquez `Analyser ce programme`.
+- Chargez un source local (`.pli`, `.cbl`, `.cob`, `.cpy`, `.jcl`, `.txt`) puis cliquez `Analyser ce programme`.
 - L'application calcule ensuite dynamiquement:
   - les flux `Input/Output`,
   - les fichiers logiques,
