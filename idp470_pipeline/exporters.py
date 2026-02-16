@@ -20,6 +20,10 @@ _SHEET_SUMMARY = "SYNTHESE"
 _SHEET_ALL = "TOUS"
 _SHEET_DICTIONARY = "DICTIONNAIRE"
 _SHEET_CONTEXT = "CONTEXTE"
+_DEFAULT_WIDTH_SAMPLE_ROWS = 3000
+_FAST_WIDTH_SAMPLE_ROWS = 450
+_FAST_STYLE_ROW_LIMIT = 1500
+_FAST_SKIP_ZONE_ROW_THRESHOLD = 15000
 
 
 def _record_order_map(contract: ContractSpec | None) -> dict[str, int]:
@@ -199,7 +203,7 @@ def _infer_numeric_kind(values: list[Any]) -> str | None:
     return "decimal" if has_decimal else "integer"
 
 
-def _set_column_widths(worksheet) -> None:
+def _set_column_widths(worksheet, *, sample_rows: int = _DEFAULT_WIDTH_SAMPLE_ROWS) -> None:
     from openpyxl.utils import get_column_letter
 
     for col_idx in range(1, worksheet.max_column + 1):
@@ -209,7 +213,7 @@ def _set_column_widths(worksheet) -> None:
         if label is not None:
             max_len = max(max_len, min(len(str(label)), 38))
 
-        sample_limit = min(worksheet.max_row, 3000)
+        sample_limit = min(worksheet.max_row, max(5, sample_rows))
         for row_idx in range(5, sample_limit + 1):
             value = worksheet.cell(row_idx, col_idx).value
             if value is None:
@@ -249,6 +253,8 @@ def _style_data_sheet(
     record_count: int,
     generated_at: str,
     column_labels: dict[str, str] | None = None,
+    *,
+    fast_mode: bool = False,
 ) -> None:
     from openpyxl.styles import Alignment, Font, PatternFill
     from openpyxl.utils import get_column_letter
@@ -302,13 +308,17 @@ def _style_data_sheet(
         cell.font = header_font
         cell.alignment = header_alignment
 
-    for row_idx in range(data_start_row, max_row + 1):
-        if row_idx % 2 == 0:
-            for col_idx in range(1, max_col + 1):
-                worksheet.cell(row_idx, col_idx).fill = stripe_fill
+    if not fast_mode:
+        for row_idx in range(data_start_row, max_row + 1):
+            if row_idx % 2 == 0:
+                for col_idx in range(1, max_col + 1):
+                    worksheet.cell(row_idx, col_idx).fill = stripe_fill
 
     for col_idx in range(1, max_col + 1):
-        sample_values = [worksheet.cell(r, col_idx).value for r in range(data_start_row, min(max_row, 1200) + 1)]
+        sample_values = [
+            worksheet.cell(r, col_idx).value
+            for r in range(data_start_row, min(max_row, 1200) + 1)
+        ]
         numeric_kind = _infer_numeric_kind(sample_values)
         header_name = str(worksheet.cell(header_row, col_idx).value or "").upper()
 
@@ -324,13 +334,17 @@ def _style_data_sheet(
         if _is_date_column(header_name):
             alignment = Alignment(horizontal="center", vertical="center")
 
-        for row_idx in range(data_start_row, max_row + 1):
+        max_style_row = max_row
+        if fast_mode:
+            max_style_row = min(max_row, data_start_row + _FAST_STYLE_ROW_LIMIT - 1)
+        for row_idx in range(data_start_row, max_style_row + 1):
             cell = worksheet.cell(row_idx, col_idx)
             cell.alignment = alignment
             if number_format and isinstance(cell.value, (int, float, Decimal)):
                 cell.number_format = number_format
 
-    _set_column_widths(worksheet)
+    width_sample = _FAST_WIDTH_SAMPLE_ROWS if fast_mode else _DEFAULT_WIDTH_SAMPLE_ROWS
+    _set_column_widths(worksheet, sample_rows=width_sample)
 
     if max_row >= data_start_row:
         ref = f"A{header_row}:{get_column_letter(max_col)}{max_row}"
@@ -588,6 +602,8 @@ def export_to_excel(
     output_path: Path,
     contract: ContractSpec | None = None,
     metadata: dict[str, Any] | None = None,
+    *,
+    fast_mode: bool = False,
 ) -> None:
     if not records:
         raise ValueError("Aucun enregistrement a exporter vers Excel.")
@@ -597,6 +613,8 @@ def export_to_excel(
     generated_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     ordered_columns, labels_by_record = _build_contract_maps(contract)
     dictionary_df = _build_dictionary_df(contract)
+    effective_fast_mode = bool(fast_mode)
+    skip_zone_sheets = effective_fast_mode and len(all_df) >= _FAST_SKIP_ZONE_ROW_THRESHOLD
 
     with pd.ExcelWriter(output_path, engine="openpyxl") as writer:
         all_df.to_excel(writer, index=False, sheet_name=_SHEET_ALL, startrow=3)
@@ -611,7 +629,7 @@ def export_to_excel(
         ]
         existing_sheet_names = {_SHEET_ALL, _SHEET_SUMMARY, _SHEET_DICTIONARY, _SHEET_CONTEXT}
 
-        if "record_type" in all_df.columns:
+        if "record_type" in all_df.columns and not skip_zone_sheets:
             grouped_map = {
                 str(record_type).strip().upper(): group_df
                 for record_type, group_df in all_df.groupby("record_type", sort=False)
@@ -674,8 +692,16 @@ def export_to_excel(
                 record_count=len(df_sheet),
                 generated_at=generated_at,
                 column_labels=labels,
+                fast_mode=effective_fast_mode,
             )
             table_index += 1
+
+    if skip_zone_sheets:
+        LOGGER.info(
+            "Excel fast mode active: zone sheets skipped for %s rows (threshold=%s).",
+            len(all_df),
+            _FAST_SKIP_ZONE_ROW_THRESHOLD,
+        )
 
     LOGGER.info("Excel exported to %s", output_path)
 

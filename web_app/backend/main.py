@@ -37,6 +37,7 @@ LOCAL_PROGRAMS_ROOT = JOBS_ROOT / "_program_sources"
 DEFAULT_INPUT_ENCODING = os.getenv("IDP470_WEB_INPUT_ENCODING", "latin-1")
 DEFAULT_CONTINUE_ON_ERROR = os.getenv("IDP470_WEB_CONTINUE_ON_ERROR", "false").strip().lower() == "true"
 DEFAULT_REUSE_CONTRACT = os.getenv("IDP470_WEB_REUSE_CONTRACT", "true").strip().lower() == "true"
+DEFAULT_FAST_EXCEL = os.getenv("IDP470_WEB_FAST_EXCEL", "true").strip().lower() == "true"
 SUPPORTED_ANALYZERS = {"idp470_pli", "cobol_copybook"}
 ALLOWED_SOURCE_SUFFIXES = {".pli", ".cbl", ".cob", ".cpy", ".jcl", ".txt"}
 
@@ -1111,6 +1112,7 @@ def _process_job(job_id: str, input_path: Path, program: ProgramRuntime, profile
                 "view_mode": profile.view_mode,
                 "role_label": profile.role_label,
             },
+            fast_mode=DEFAULT_FAST_EXCEL,
         )
 
         pdf_factures_path = output_dir / "facture_exemple.pdf"
