@@ -61,6 +61,28 @@ const CATALOG_CACHE_TTL_MS = 5 * 60 * 1000;
 const LOCAL_PROGRAM_OPTION_VALUE = "__local_program__";
 const CATALOG_REQUEST_TIMEOUT_MS = 25000;
 
+function _normalizeSectionTitle(value) {
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
+}
+
+function _findPanelByHeading(targetTitle) {
+  const wanted = _normalizeSectionTitle(targetTitle);
+  const panels = Array.from(document.querySelectorAll("section.panel"));
+  return (
+    panels.find((section) => {
+      const heading = section.querySelector("h2");
+      return _normalizeSectionTitle(heading?.textContent) === wanted;
+    }) || null
+  );
+}
+
+const resolvedKpiPanel = kpiPanel || _findPanelByHeading("Indicateurs");
+const resolvedDownloadsPanel = downloadsPanel || _findPanelByHeading("Telechargements");
+
 const STATUS_CONFIG = {
   queued: { label: "En attente", badgeClass: "is-queued" },
   running: { label: "En cours", badgeClass: "is-running" },
@@ -765,11 +787,11 @@ function setKpiCards(kpis) {
 
 function setResultPanelsVisible(visible) {
   const show = Boolean(visible);
-  if (kpiPanel) {
-    kpiPanel.classList.toggle("hidden", !show);
+  if (resolvedKpiPanel) {
+    resolvedKpiPanel.classList.toggle("hidden", !show);
   }
-  if (downloadsPanel) {
-    downloadsPanel.classList.toggle("hidden", !show);
+  if (resolvedDownloadsPanel) {
+    resolvedDownloadsPanel.classList.toggle("hidden", !show);
   }
 }
 
@@ -1163,6 +1185,8 @@ fileNameSelect.addEventListener("change", () => {
 
 programSelect.addEventListener("change", async () => {
   setError("");
+  resetExecutionState("Aucun traitement en cours (changement de programme).");
+  setResultPanelsVisible(false);
   const localSelected = isLocalProgramSelection();
   toggleLocalProgramPanel(localSelected);
   if (localSelected && !localProgramId) {
