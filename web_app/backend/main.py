@@ -147,7 +147,10 @@ class ProgramRuntime:
     reuse_contract: bool
 
 
-_DCL_FILE_RE = re.compile(r"\bDCL\s+([A-Z0-9_]+)\s+FILE\b([^;]*);", re.IGNORECASE)
+_DCL_FILE_RE = re.compile(
+    r"\bDCL\s+([A-Z][A-Z0-9_]*)\b(?:\s+[A-Z0-9_()]+)*\s+FILE\b([^;]*);",
+    re.IGNORECASE,
+)
 _FILE_RECSIZE_RE = re.compile(r"\b(?:RECSIZE|BLKSIZE)\s*\(\s*(\d+)\s*\)", re.IGNORECASE)
 _WRITE_FILE_RE = re.compile(
     r"\bWRITE\s+FILE\s*\(\s*([A-Z0-9_]+)\s*\)\s+FROM\s*\(?\s*([A-Z0-9_]+)\s*\)?",
@@ -795,6 +798,7 @@ def _discover_flow_profiles_pli(program: ProgramRuntime, text: str) -> dict[tupl
     declarations: dict[str, tuple[str, str]] = {}
     file_to_structures: dict[str, set[str]] = defaultdict(set)
     aliases_by_base: dict[str, set[str]] = defaultdict(set)
+    flow_by_file: dict[str, str] = {}
 
     for raw_line in text.splitlines():
         line = _normalize_source_line(raw_line)
@@ -813,11 +817,14 @@ def _discover_flow_profiles_pli(program: ProgramRuntime, text: str) -> dict[tupl
             file_name = write_match.group(1).upper()
             structure_name = write_match.group(2).upper()
             file_to_structures[file_name].add(structure_name)
+            flow_by_file[file_name] = "output"
 
         for read_match in _READ_FILE_RE.finditer(line):
             file_name = read_match.group(1).upper()
             structure_name = read_match.group(2).upper()
             file_to_structures[file_name].add(structure_name)
+            if flow_by_file.get(file_name) != "output":
+                flow_by_file[file_name] = "input"
 
         alias_match = _BASED_ADDR_RE.search(line)
         if alias_match:
@@ -829,7 +836,8 @@ def _discover_flow_profiles_pli(program: ProgramRuntime, text: str) -> dict[tupl
     file_to_structures.setdefault("FFAC3A", set()).add("WTFAC")
 
     profiles: dict[tuple[str, str], FlowProfile] = {}
-    for file_name, (flow_type, description) in sorted(declarations.items()):
+    for file_name, (declared_flow, description) in sorted(declarations.items()):
+        flow_type = flow_by_file.get(file_name, declared_flow)
         mapped_structures = set(file_to_structures.get(file_name, set()))
         expanded_structures = set(mapped_structures)
         for structure_name in mapped_structures:
