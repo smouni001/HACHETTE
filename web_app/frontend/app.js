@@ -773,6 +773,19 @@ function setResultPanelsVisible(visible) {
   }
 }
 
+function resetExecutionState(message = "Aucun traitement en cours.") {
+  stopPolling();
+  activeJobId = null;
+  completionNotifiedForJob = null;
+  setStatusVisual("queued", "En attente");
+  jobIdValue.textContent = "-";
+  messageValue.textContent = message;
+  updatedAtValue.textContent = "Derniere mise a jour: -";
+  progressBar.style.width = "0%";
+  progressValue.textContent = "0%";
+  setWarnings([]);
+}
+
 function resetKpisForProfile(profile) {
   if (profile?.view_mode === "invoice") {
     setKpiCards([
@@ -911,6 +924,7 @@ function updateUploadLabel() {
     fileInput.disabled = true;
     renderProfileContext(null);
     launchBtn.disabled = true;
+    resetExecutionState("Aucun traitement en cours (aucun flux exploitable).");
     setResultPanelsVisible(false);
     setKpiCards([
       { label: "Indicateur 1", value: 0 },
@@ -930,6 +944,7 @@ function updateUploadLabel() {
     fileInput.value = "";
     fileInput.disabled = true;
     launchBtn.disabled = true;
+    resetExecutionState("Aucun traitement en cours (mode standard restreint).");
     setResultPanelsVisible(false);
     setError("Mode standard actif: seuls les fichiers Factures sont autorises.");
     return;
@@ -939,6 +954,7 @@ function updateUploadLabel() {
   if (!profile.supports_processing) {
     fileInput.value = "";
     fileInput.disabled = true;
+    resetExecutionState("Aucun traitement en cours (mapping indisponible).");
     setResultPanelsVisible(false);
     setError(
       `Le fichier ${profile.file_name} est detecte, mais aucun mapping structurel exploitable n'a ete trouve.`,
@@ -1164,16 +1180,8 @@ programSelect.addEventListener("change", async () => {
   });
   if (!loaded && strictCatalogMode) {
     const reason = lastCatalogFailureMessage || "Aucun flux exploitable n'a ete detecte.";
-    if (lastStableState) {
-      restoreUiState(lastStableState);
-      openModal({
-        type: "error",
-        title: "Chargement programme impossible",
-        message: `${reason} Retour a l'etat precedent.`,
-        primaryLabel: "Compris",
-      });
-      return;
-    }
+    resetExecutionState("Aucun traitement en cours (programme sans flux exploitable).");
+    setResultPanelsVisible(false);
     openModal({
       type: "error",
       title: "Chargement programme impossible",
@@ -1184,7 +1192,6 @@ programSelect.addEventListener("change", async () => {
 });
 
 loadLocalProgramBtn.addEventListener("click", async () => {
-  const snapshotBeforeLoad = captureUiState();
   const newProgramId = await registerLocalProgram();
   if (!newProgramId) {
     return;
@@ -1201,11 +1208,20 @@ loadLocalProgramBtn.addEventListener("click", async () => {
     const reason =
       lastCatalogFailureMessage ||
       `Aucun fichier exploitable n'a ete detecte pour ${String(newProgramId).toUpperCase()}.`;
-    restoreUiState(snapshotBeforeLoad, { removeProgramId: newProgramId });
+    removeKnownProgram(newProgramId);
+    localProgramId = null;
+    rebuildProgramOptions(LOCAL_PROGRAM_OPTION_VALUE);
+    programSelect.value = LOCAL_PROGRAM_OPTION_VALUE;
+    toggleLocalProgramPanel(true);
+    clearCatalogSelections();
+    setLocalProgramStatus("Aucun programme local charge.");
+    setCatalogStatus("Mode programme local: chargez et analysez votre source pour afficher les flux.");
+    resetExecutionState("Aucun traitement en cours (programme local sans flux).");
+    setResultPanelsVisible(false);
     openModal({
       type: "error",
       title: "Programme sans flux exploitable",
-      message: `${reason} Retour a l'etat precedent.`,
+      message: reason,
       primaryLabel: "Compris",
     });
     return;
