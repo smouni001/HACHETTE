@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: idil-papyrus-web
+    name: idil470-file-extract
     env: docker
     plan: free
     dockerfilePath: ./Dockerfile

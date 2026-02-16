@@ -171,7 +171,7 @@ Le repo contient deja un blueprint `render.yaml` a la racine.
 2. `New` -> `Blueprint`
 3. Connecter le repo GitHub `smouni001/HACHETTE`
 4. Selectionner la branche `main`
-5. Valider le service `idil-papyrus-web` (plan `free`)
+5. Valider le service `idil470-file-extract` (plan `free`)
 6. Lancer le deploy
 
 Render utilisera automatiquement:
@@ -182,7 +182,7 @@ Render utilisera automatiquement:
 ### Apres deploiement
 
 - Ouvrir l'URL Render
-- Verifier `https://<votre-app>.onrender.com/api/health`
+- Verifier `https://idil470-file-extract.onrender.com/api/health`
 - Selectionner un flux puis charger le fichier correspondant depuis l'interface
 - Verifier les telechargements Excel/PDF
 

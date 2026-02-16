@@ -14,7 +14,7 @@ Variables a definir dans PowerShell:
 ```powershell
 $env:AWS_REGION="eu-west-3"
 $env:AWS_ACCOUNT_ID=(aws sts get-caller-identity --query Account --output text)
-$env:APP_NAME="idil-papyrus-web"
+$env:APP_NAME="idil470-file-extract"
 $env:ECR_REPO="$env:APP_NAME"
 ```
 
@@ -95,7 +95,7 @@ Le plus simple est de passer par la console AWS:
 
 1. ECS > Cluster > Create service
 2. Launch type: Fargate
-3. Task definition: `idil-papyrus-web`
+3. Task definition: `idil470-file-extract`
 4. Desired tasks: `1`
 5. Load balancer: Application Load Balancer
 6. Listener HTTP 80 -> target group port 8000

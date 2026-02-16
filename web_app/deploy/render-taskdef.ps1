@@ -6,7 +6,7 @@ param(
   [string]$AccountId = "",
 
   [Parameter(Mandatory = $false)]
-  [string]$AppName = "idil-papyrus-web",
+  [string]$AppName = "idil470-file-extract",
 
   [Parameter(Mandatory = $false)]
   [string]$TemplatePath = "web_app/deploy/taskdef.template.json",
@@ -30,4 +30,3 @@ $content = $content.Replace("__APP_NAME__", $AppName)
 
 Set-Content -Path $OutputPath -Value $content -Encoding UTF8
 Write-Output "Task definition generee: $OutputPath"
-

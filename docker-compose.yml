@@ -3,7 +3,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: idil-papyrus-web
+    container_name: idil470-file-extract
     ports:
       - "8000:8000"
     environment:
