@@ -904,7 +904,7 @@ def _process_job(job_id: str, input_path: Path, program: ProgramRuntime, profile
             continue_on_error=program.continue_on_error,
         )
 
-        parsed_path = output_dir / "parsed_records.jsonl"
+        parsed_path = output_dir / "extaction.jsonl"
         save_jsonl(records=records, output_path=parsed_path)
 
         _set_job(
@@ -912,7 +912,7 @@ def _process_job(job_id: str, input_path: Path, program: ProgramRuntime, profile
             progress=55,
             message="Generation Excel en cours",
         )
-        excel_path = output_dir / "parsed_records.xlsx"
+        excel_path = output_dir / "extaction.xlsx"
         export_to_excel(
             records=records,
             output_path=excel_path,
@@ -1078,10 +1078,10 @@ def _download_links(job_id: str, job: JobState) -> dict[str, str]:
 def _artifact_download_filename(job: JobState, output_key: str, output_path: Path) -> str:
     prefix = _normalize_file_name(job.file_name) or "EXPORT"
     suffix_map = {
-        "excel": "parsed_records.xlsx",
+        "excel": "extaction.xlsx",
         "pdf_factures": "facture_exemple.pdf",
         "pdf_synthese": "synthese_comptable.pdf",
-        "jsonl": "parsed_records.jsonl",
+        "jsonl": "extaction.jsonl",
         "contract": "contract.json",
     }
     suffix = suffix_map.get(output_key, output_path.name)
