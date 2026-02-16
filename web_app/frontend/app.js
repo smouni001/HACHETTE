@@ -297,7 +297,6 @@ function setWarnings(warnings) {
 
 function setBusy(isBusy) {
   launchBtn.disabled = isBusy;
-  fileInput.disabled = isBusy;
   programSelect.disabled = isBusy;
   localProgramFile.disabled = isBusy;
   loadLocalProgramBtn.disabled = isBusy;
@@ -305,6 +304,11 @@ function setBusy(isBusy) {
   fileNameSelect.disabled = isBusy;
   advancedModeToggle.disabled = isBusy;
   launchBtn.textContent = isBusy ? "Extraction en cours..." : "Extraction Excel/PDF";
+  if (isBusy) {
+    fileInput.disabled = true;
+    return;
+  }
+  updateUploadLabel();
   setAdvancedModeIndicator();
 }
 
@@ -890,7 +894,9 @@ function setAdvancedModeIndicator() {
 function updateUploadLabel() {
   const profile = selectedProfile();
   if (!profile) {
-    dataFileLabel.textContent = "Charger le fichier (obligatoire)";
+    dataFileLabel.textContent = "Charger le fichier (desactive: aucun flux detecte)";
+    fileInput.value = "";
+    fileInput.disabled = true;
     renderProfileContext(null);
     launchBtn.disabled = true;
     return;
@@ -901,12 +907,17 @@ function updateUploadLabel() {
   resetKpisForProfile(profile);
   updateDownloadMode(profile);
   if (isInvoiceOnlyProgram() && !isAdvancedModeEnabled() && profile.view_mode !== "invoice") {
+    fileInput.value = "";
+    fileInput.disabled = true;
     launchBtn.disabled = true;
     setError("Mode standard actif: seuls les fichiers Factures sont autorises.");
     return;
   }
+  fileInput.disabled = false;
   launchBtn.disabled = !profile.supports_processing;
   if (!profile.supports_processing) {
+    fileInput.value = "";
+    fileInput.disabled = true;
     setError(
       `Le fichier ${profile.file_name} est detecte, mais aucun mapping structurel exploitable n'a ete trouve.`,
     );
