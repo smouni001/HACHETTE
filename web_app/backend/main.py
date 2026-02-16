@@ -1075,6 +1075,22 @@ def _download_links(job_id: str, job: JobState) -> dict[str, str]:
     return links
 
 
+def _artifact_download_filename(job: JobState, output_key: str, output_path: Path) -> str:
+    prefix = _normalize_file_name(job.file_name) or "EXPORT"
+    suffix_map = {
+        "excel": "parsed_records.xlsx",
+        "pdf_factures": "facture_exemple.pdf",
+        "pdf_synthese": "synthese_comptable.pdf",
+        "jsonl": "parsed_records.jsonl",
+        "contract": "contract.json",
+    }
+    suffix = suffix_map.get(output_key, output_path.name)
+    upper_prefix = f"{prefix}_"
+    if suffix.upper().startswith(upper_prefix):
+        return suffix
+    return f"{prefix}_{suffix}"
+
+
 def _to_status_response(job_id: str, job: JobState) -> JobStatusResponse:
     return JobStatusResponse(
         job_id=job_id,
@@ -1364,9 +1380,10 @@ def download_artifact(job_id: str, artifact: str) -> FileResponse:
     if not output_path.exists():
         raise HTTPException(status_code=404, detail=f"Fichier introuvable: {output_path.name}")
 
+    download_name = _artifact_download_filename(job, output_key, output_path)
     return FileResponse(
         output_path,
-        filename=output_path.name,
+        filename=download_name,
         media_type=_safe_media_type(output_path),
     )
 
