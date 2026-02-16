@@ -319,6 +319,24 @@ function setWarnings(warnings) {
   warningBox.classList.remove("hidden");
 }
 
+function syncSelectionGate() {
+  const profile = selectedProfile();
+  if (!profile) {
+    fileInput.disabled = true;
+    launchBtn.disabled = true;
+    return;
+  }
+
+  if (isInvoiceOnlyProgram() && !isAdvancedModeEnabled() && profile.view_mode !== "invoice") {
+    fileInput.disabled = true;
+    launchBtn.disabled = true;
+    return;
+  }
+
+  fileInput.disabled = !profile.supports_processing;
+  launchBtn.disabled = !profile.supports_processing;
+}
+
 function setBusy(isBusy) {
   launchBtn.disabled = isBusy;
   programSelect.disabled = isBusy;
@@ -332,7 +350,7 @@ function setBusy(isBusy) {
     fileInput.disabled = true;
     return;
   }
-  updateUploadLabel();
+  syncSelectionGate();
   setAdvancedModeIndicator();
 }
 
