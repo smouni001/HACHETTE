@@ -611,12 +611,9 @@ async function registerLocalProgram() {
     localProgramId = String(program.program_id || "").toLowerCase();
     upsertProgram(program);
     rebuildProgramOptions(localProgramId);
-    setLocalProgramStatus(`Programme local charge: ${program.display_name} (${program.source_program}).`);
-    showToast({
-      type: "success",
-      title: "Programme local analyse",
-      message: `Le programme ${program.source_program || program.program_id} est pret.`,
-    });
+    setLocalProgramStatus(
+      `Programme local charge: ${program.display_name} (${program.source_program}). Analyse des flux en cours...`,
+    );
     return localProgramId;
   } catch (error) {
     setLocalProgramStatus(error.message || "Echec de l'analyse du programme local.", true);
@@ -1177,7 +1174,20 @@ loadLocalProgramBtn.addEventListener("click", async () => {
       message: `${reason} Retour a l'etat precedent.`,
       primaryLabel: "Compris",
     });
+    return;
   }
+
+  const activeProgram = currentProgramConfig();
+  const sourceProgram = activeProgram?.source_program || String(newProgramId).toUpperCase();
+  const flowCount = Array.isArray(catalogProfiles) ? catalogProfiles.length : 0;
+  setLocalProgramStatus(
+    `Programme local analyse: ${activeProgram?.display_name || sourceProgram} (${sourceProgram}). ${flowCount} flux detecte(s).`,
+  );
+  showToast({
+    type: "success",
+    title: "Programme local analyse",
+    message: `${sourceProgram}: ${flowCount} flux detecte(s), catalogue pret.`,
+  });
 });
 
 advancedModeToggle.addEventListener("change", () => {
