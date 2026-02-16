@@ -38,6 +38,8 @@ const kpiLabel3 = document.getElementById("kpiLabel3");
 const kpiValue1 = document.getElementById("kpiValue1");
 const kpiValue2 = document.getElementById("kpiValue2");
 const kpiValue3 = document.getElementById("kpiValue3");
+const kpiPanel = document.getElementById("kpiPanel");
+const downloadsPanel = document.getElementById("downloadsPanel");
 
 const downloadExcel = document.getElementById("downloadExcel");
 const downloadPdfFactures = document.getElementById("downloadPdfFactures");
@@ -761,6 +763,16 @@ function setKpiCards(kpis) {
   setMetricValue(kpiValue3, Number(padded[2].value || 0));
 }
 
+function setResultPanelsVisible(visible) {
+  const show = Boolean(visible);
+  if (kpiPanel) {
+    kpiPanel.classList.toggle("hidden", !show);
+  }
+  if (downloadsPanel) {
+    downloadsPanel.classList.toggle("hidden", !show);
+  }
+}
+
 function resetKpisForProfile(profile) {
   if (profile?.view_mode === "invoice") {
     setKpiCards([
@@ -899,6 +911,13 @@ function updateUploadLabel() {
     fileInput.disabled = true;
     renderProfileContext(null);
     launchBtn.disabled = true;
+    setResultPanelsVisible(false);
+    setKpiCards([
+      { label: "Indicateur 1", value: 0 },
+      { label: "Indicateur 2", value: 0 },
+      { label: "Indicateur 3", value: 0 },
+    ]);
+    updateDownloadMode(null);
     return;
   }
 
@@ -906,10 +925,12 @@ function updateUploadLabel() {
   renderProfileContext(profile);
   resetKpisForProfile(profile);
   updateDownloadMode(profile);
+  setResultPanelsVisible(profile.supports_processing);
   if (isInvoiceOnlyProgram() && !isAdvancedModeEnabled() && profile.view_mode !== "invoice") {
     fileInput.value = "";
     fileInput.disabled = true;
     launchBtn.disabled = true;
+    setResultPanelsVisible(false);
     setError("Mode standard actif: seuls les fichiers Factures sont autorises.");
     return;
   }
@@ -918,10 +939,12 @@ function updateUploadLabel() {
   if (!profile.supports_processing) {
     fileInput.value = "";
     fileInput.disabled = true;
+    setResultPanelsVisible(false);
     setError(
       `Le fichier ${profile.file_name} est detecte, mais aucun mapping structurel exploitable n'a ete trouve.`,
     );
   } else {
+    setResultPanelsVisible(true);
     setError("");
   }
 }
@@ -1281,6 +1304,7 @@ form.addEventListener("submit", async (event) => {
 
 (async function initCatalog() {
   setAdvancedModeIndicator();
+  setResultPanelsVisible(false);
   const selectedProgramId = await loadPrograms();
   toggleLocalProgramPanel(isLocalProgramSelection());
   const selectedProgram = knownPrograms.find((item) => item.program_id === selectedProgramId);
