@@ -443,6 +443,13 @@ function setCatalogStatus(message, isLoading = false) {
   catalogStatus.classList.toggle("is-loading", Boolean(isLoading));
 }
 
+function clearCatalogSelections() {
+  catalogProfiles = [];
+  flowTypeSelect.innerHTML = "";
+  fileNameSelect.innerHTML = "";
+  updateUploadLabel();
+}
+
 function notifyNoFlow(programName) {
   const safeProgram = programName || "le programme selectionne";
   const throttleKey = `no-flow:${safeProgram}:${isAdvancedModeEnabled() ? "advanced" : "standard"}`;
@@ -534,6 +541,10 @@ function toggleLocalProgramPanel(visible) {
   localProgramPanel.classList.toggle("hidden", !visible);
   if (!visible) {
     setLocalProgramStatus("Aucun programme local charge.");
+    return;
+  }
+  if (!localProgramId) {
+    setLocalProgramStatus("Aucun programme local charge. Selectionnez un fichier puis cliquez sur Analyser ce programme.");
   }
 }
 
@@ -960,6 +971,7 @@ function loadFlowOptions(defaultFlowType = "output", defaultFileName = "FICDEMA"
   });
 
   if (flowTypes.length === 0) {
+    clearCatalogSelections();
     return;
   }
   flowTypeSelect.value = flowTypes.includes(defaultFlowType) ? defaultFlowType : flowTypes[0];
@@ -976,13 +988,10 @@ async function loadCatalog(preferredSelection = null, options = {}) {
   const programId = currentProgramId();
   const primaryProgram = isPrimaryProgram(programId);
   if (isLocalProgramSelection() && !programId) {
-    catalogProfiles = [];
-    flowTypeSelect.innerHTML = "";
-    fileNameSelect.innerHTML = "";
-    renderProfileContext(null);
-    launchBtn.disabled = true;
+    clearCatalogSelections();
     lastCatalogFailureKind = "missing_program";
     lastCatalogFailureMessage = "Chargez d'abord un programme local, puis lancez l'analyse.";
+    setLocalProgramStatus("Aucun programme local charge. Selectionnez un fichier puis cliquez sur Analyser ce programme.");
     setCatalogStatus(lastCatalogFailureMessage);
     return false;
   }
@@ -1004,10 +1013,7 @@ async function loadCatalog(preferredSelection = null, options = {}) {
     catalogSourceProgram = payload?.source_program || "programme";
     catalogProfiles = Array.isArray(payload.profiles) ? payload.profiles : [];
     if (catalogProfiles.length === 0) {
-      flowTypeSelect.innerHTML = "";
-      fileNameSelect.innerHTML = "";
-      renderProfileContext(null);
-      launchBtn.disabled = true;
+      clearCatalogSelections();
       const noFlowMessage =
         `Aucun flux exploitable detecte pour ${catalogSourceProgram}. ` +
         "Verifiez votre selection de programme ou la source chargee.";
@@ -1044,11 +1050,7 @@ async function loadCatalog(preferredSelection = null, options = {}) {
     lastCatalogFailureMessage = failureMessage;
 
     if (!allowFallback || !primaryProgram) {
-      catalogProfiles = [];
-      flowTypeSelect.innerHTML = "";
-      fileNameSelect.innerHTML = "";
-      renderProfileContext(null);
-      launchBtn.disabled = true;
+      clearCatalogSelections();
       setCatalogStatus(failureMessage);
       if (!silentFailureNotice) {
         openModal({
@@ -1117,11 +1119,7 @@ programSelect.addEventListener("change", async () => {
   const localSelected = isLocalProgramSelection();
   toggleLocalProgramPanel(localSelected);
   if (localSelected && !localProgramId) {
-    catalogProfiles = [];
-    flowTypeSelect.innerHTML = "";
-    fileNameSelect.innerHTML = "";
-    renderProfileContext(null);
-    launchBtn.disabled = true;
+    clearCatalogSelections();
     setCatalogStatus("Mode programme local: chargez et analysez votre source pour afficher les flux.");
     return;
   }
