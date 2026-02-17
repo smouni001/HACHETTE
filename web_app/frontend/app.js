@@ -882,7 +882,10 @@ function applyStatus(payload) {
   progressValue.textContent = `${progress}%`;
 
   setWarnings(payload.warnings || []);
-  setKpiCards(payload.kpis || []);
+  const incomingKpis = Array.isArray(payload.kpis) ? payload.kpis : [];
+  if (incomingKpis.length > 0) {
+    setKpiCards(incomingKpis);
+  }
   updateDownloadMode(
     {
       supports_pdf: (payload.view_mode || "generic") === "invoice",
